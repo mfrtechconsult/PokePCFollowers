@@ -70,7 +70,7 @@ by Dramatic Shape, Dramaless Shape and Battle Art Voxel Fork.
 
 ## Inter-mod compatibility
 
-Version 0.6.1 keeps its renderer, party-menu, follower and Yellow encounter
+Version 0.7.0 keeps its renderer, party-menu, follower and Yellow encounter
 wrappers chain-safe. During a hot reload it restores a function only when its
 own wrapper is still the active outermost function, so wrappers installed by
 later-loading mods are not overwritten. This is intended for stacks containing
