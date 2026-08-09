@@ -1,6 +1,7 @@
 import json
 import struct
 import unittest
+import zipfile
 from pathlib import Path
 
 
@@ -38,6 +39,20 @@ class FollowerAssetTests(unittest.TestCase):
         manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["version"], "0.6.0")
         self.assertIn("CRYSTAL_251", manifest["optional_dependencies"])
+
+    def test_installable_archive_matches_runtime_sources(self) -> None:
+        with zipfile.ZipFile(ROOT / "mod.zip") as archive:
+            names = set(archive.namelist())
+            self.assertEqual(archive.read("main.lua"), (ROOT / "main.lua").read_bytes())
+            self.assertEqual(
+                archive.read("manifest.json"), (ROOT / "manifest.json").read_bytes()
+            )
+            self.assertFalse(any("Zone.Identifier" in name for name in names))
+            self.assertIn("overrides/sprites/pikachu.png", names)
+            self.assertTrue(
+                all(f"assets/sprites/follower_{dex:03d}.png" in names
+                    for dex in range(1, 252))
+            )
 
 
 if __name__ == "__main__":

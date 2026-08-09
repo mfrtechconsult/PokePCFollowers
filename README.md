@@ -60,6 +60,15 @@ The follower sprite is also marked `trueColor` for render-pipeline use so the
 voxel renderer does not run the fixed `SPRITE_PIKACHU` image through its palette
 bake.
 
+## Inter-mod compatibility
+
+Version 0.6.0 keeps its renderer, party-menu, follower and Yellow encounter
+wrappers chain-safe. During a hot reload it restores a function only when its
+own wrapper is still the active outermost function, so wrappers installed by
+later-loading mods are not overwritten. This is intended for stacks containing
+Dramatic Sky Ride, Kanto Dive or the standalone Dramatic Deep Dive; those mods
+remain responsible for their own mount and underwater movement rules.
+
 ## Experimental Red/Blue + Voxel Fix
 
 This build extends the follower entity to Pokémon Red and Pokémon Blue.
