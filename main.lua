@@ -36,7 +36,7 @@ return function(mod)
   local OPPOSITE = { up = "down", down = "up", left = "right", right = "left" }
 
   -- ----------------------------------------------------------------------
-  -- 1. Asset path helpers (dex‑numbered files, e.g. follower_004.png)
+  -- 1. Asset path helpers (dex-numbered files, e.g. follower_004.png)
   -- ----------------------------------------------------------------------
   local speciesToDex = {
     BULBASAUR=1, IVYSAUR=2, VENUSAUR=3, CHARMANDER=4, CHARMELEON=5, CHARIZARD=6,
@@ -66,11 +66,49 @@ return function(mod)
     ZAPDOS=145, MOLTRES=146, DRATINI=147, DRAGONAIR=148, DRAGONITE=149, MEWTWO=150, MEW=151
   }
 
-  local function assetPath(species)
+  local MAX_FOLLOWER_DEX = 251
+
+  -- Other content mods can register additional species before this mod loads.
+  -- Crystal 251 is an optional dependency, so its Johto records are visible
+  -- here whenever it is enabled and has completed its ROM import.
+  if mod.content and mod.content.pokemon and mod.content.pokemon.each then
+    pcall(function()
+      for id, def in mod.content.pokemon:each() do
+        local dex = def and tonumber(def.dex)
+        if type(id) == "string" and dex and dex >= 1 and dex <= MAX_FOLLOWER_DEX then
+          speciesToDex[id:upper()] = math.floor(dex)
+        end
+      end
+    end)
+  end
+
+  local function dexForSpecies(species)
+    local numeric = tonumber(species)
+    if numeric and numeric >= 1 and numeric <= MAX_FOLLOWER_DEX then
+      return math.floor(numeric)
+    end
+
     local key = tostring(species or FALLBACK_SPECIES):upper()
     local dex = speciesToDex[key]
+    if dex then return dex end
+
+    -- Runtime fallback for species supplied by a mod that loaded after us.
+    local pokemon = Game and Game.data and Game.data.pokemon
+    local def = pokemon and pokemon[key]
+    dex = def and tonumber(def.dex)
+    if dex and dex >= 1 and dex <= MAX_FOLLOWER_DEX then
+      dex = math.floor(dex)
+      speciesToDex[key] = dex
+      return dex
+    end
+    return nil
+  end
+
+  local function assetPath(species)
+    local key = tostring(species or FALLBACK_SPECIES):upper()
+    local dex = dexForSpecies(key)
     local filename = dex and string.format("follower_%03d.png", dex)
-                  or "follower_CHARMANDER.png"
+                  or "follower_004.png"
     return mod.path .. "/assets/sprites/" .. filename
   end
 
@@ -78,7 +116,7 @@ return function(mod)
   local followerImgCache = {}
   local function getFollowerImage(species)
     local key = tostring(species or FALLBACK_SPECIES):upper()
-    local dex = speciesToDex[key] or 4
+    local dex = dexForSpecies(key) or 4
     local dexStr = string.format("%03d", dex)
     if not followerImgCache[dexStr] then
       local path = assetPath(key)
@@ -303,6 +341,7 @@ return function(mod)
   local originalTalk = PikachuFollower.talk
   local originalStarterInParty = PikachuFollower.starterInParty
   local vanillaShouldSpawn
+  local vanillaOnMapEnteredShouldSpawn
 
   -- New shouldSpawn: works for all versions and checks our selection
   local function shouldSpawn(game, ow)
@@ -322,7 +361,13 @@ return function(mod)
     vanillaShouldSpawn = oldSpawn
   end
   -- Also patch onMapEntered directly in case it has its own closure
-  pcall(function() replaceUpvalue(PikachuFollower.onMapEntered, "shouldSpawn", shouldSpawn) end)
+  if originalOnMapEntered then
+    pcall(function()
+      local replaced, oldSpawn = replaceUpvalue(
+        originalOnMapEntered, "shouldSpawn", shouldSpawn)
+      if replaced then vanillaOnMapEnteredShouldSpawn = oldSpawn end
+    end)
+  end
 
   -- starterInParty – return any healthy mon, not just Pikachu
   local function wrappedStarterInParty(save, needHealthy)
@@ -341,7 +386,8 @@ return function(mod)
   -- 8. SpriteRenderer overrides (for dynamic texture and 3D voxel)
   -- ----------------------------------------------------------------------
   local origResolveImage = SpriteRenderer.resolveImage
-  SpriteRenderer.resolveImage = function(self, ...)
+  local wrappedResolveImage
+  wrappedResolveImage = function(self, ...)
     if self and self.def and self.def.id == SPRITE_ID then
       local activeMon = getActiveFollowerMon(Game, false)
       if activeMon then
@@ -350,9 +396,11 @@ return function(mod)
     end
     return origResolveImage(self, ...)
   end
+  SpriteRenderer.resolveImage = wrappedResolveImage
 
   local origSpriteDraw = SpriteRenderer.draw
-  SpriteRenderer.draw = function(self, px, py, camX, camY, facing, walkPhase, stepFlip)
+  local wrappedSpriteDraw
+  wrappedSpriteDraw = function(self, px, py, camX, camY, facing, walkPhase, stepFlip)
     if self and self.def and self.def.id == SPRITE_ID then
       local activeMon = getActiveFollowerMon(Game, false)
       if not activeMon then return end
@@ -376,6 +424,7 @@ return function(mod)
     end
     return origSpriteDraw(self, px, py, camX, camY, facing, walkPhase, stepFlip)
   end
+  SpriteRenderer.draw = wrappedSpriteDraw
 
   -- ----------------------------------------------------------------------
   -- 9. PikachuFollower function wrappers
@@ -461,7 +510,8 @@ return function(mod)
   -- 10. PartyMenu enhancements (true‑color and sync)
   -- ----------------------------------------------------------------------
   local origPartyMenuDraw = PartyMenu.draw
-  PartyMenu.draw = function(self, ...)
+  local wrappedPartyMenuDraw
+  wrappedPartyMenuDraw = function(self, ...)
     local result = origPartyMenuDraw and origPartyMenuDraw(self, ...)
     if colorMode() then
       local party = (self.game and self.game.save and self.game.save.party) or {}
@@ -473,9 +523,11 @@ return function(mod)
     end
     return result
   end
+  PartyMenu.draw = wrappedPartyMenuDraw
 
   local origPartyMenuUpdate = PartyMenu.update
-  PartyMenu.update = function(self, dt)
+  local wrappedPartyMenuUpdate
+  wrappedPartyMenuUpdate = function(self, dt)
     local result = origPartyMenuUpdate and origPartyMenuUpdate(self, dt)
     pcall(function()
       local game = self.game
@@ -491,6 +543,7 @@ return function(mod)
     end)
     return result
   end
+  PartyMenu.update = wrappedPartyMenuUpdate
 
   -- ----------------------------------------------------------------------
   -- 11. Party submenu hook (FOLLOWER / FOLLOWING)
@@ -562,6 +615,9 @@ return function(mod)
   -- ----------------------------------------------------------------------
   -- 12. Yellow‑specific story overrides (optional)
   -- ----------------------------------------------------------------------
+  local yellowBattleState
+  local originalNewWild
+  local wrappedNewWild
   if version == "yellow" then
     mod.content.strings:override("PIKACHU", "CHARMANDER")
     mod.content.text:override("_OaksLabPikachuDislikesPokeballsText1", "OAK: What?")
@@ -571,12 +627,13 @@ return function(mod)
       "OAK: Look at it!\nCHARMANDER seems to\nlike you!")
 
     -- Patch the wild encounter in Oak's lab to give Charmander instead of Pikachu
-    local BattleState = require("src.battle.BattleState")
-    local origNewWild = BattleState.newWild
-    BattleState.newWild = function(game, species, level, ...)
+    yellowBattleState = require("src.battle.BattleState")
+    originalNewWild = yellowBattleState.newWild
+    wrappedNewWild = function(game, species, level, ...)
       if species == "PIKACHU" and level == 5 then species = "CHARMANDER" end
-      return origNewWild(game, species, level, ...)
+      return originalNewWild(game, species, level, ...)
     end
+    yellowBattleState.newWild = wrappedNewWild
   end
 
   -- ----------------------------------------------------------------------
@@ -592,9 +649,21 @@ return function(mod)
     wrapperTalk = wrappedTalk,
     wrapperStarterInParty = wrappedStarterInParty,
     originalShouldSpawn = vanillaShouldSpawn,
+    originalOnMapEnteredShouldSpawn = vanillaOnMapEnteredShouldSpawn,
+    wrapperResolveImage = wrappedResolveImage,
+    wrapperSpriteDraw = wrappedSpriteDraw,
+    wrapperPartyMenuDraw = wrappedPartyMenuDraw,
+    wrapperPartyMenuUpdate = wrappedPartyMenuUpdate,
+    wrapperNewWild = wrappedNewWild,
   }
 
   state.restore = function()
+    -- Restore the second closure first. If update and onMapEntered share the
+    -- same shouldSpawn upvalue, restoring update last still leaves the shared
+    -- cell at the true vanilla function.
+    if originalOnMapEntered and vanillaOnMapEnteredShouldSpawn then
+      replaceUpvalue(originalOnMapEntered, "shouldSpawn", vanillaOnMapEnteredShouldSpawn)
+    end
     if originalUpdate and vanillaShouldSpawn then
       replaceUpvalue(originalUpdate, "shouldSpawn", vanillaShouldSpawn)
     end
@@ -610,11 +679,23 @@ return function(mod)
     if PikachuFollower.starterInParty == wrappedStarterInParty then
       PikachuFollower.starterInParty = originalStarterInParty
     end
-    if SpriteRenderer.resolveImage == SpriteRenderer.resolveImage and origResolveImage then
+    -- Only remove wrappers that are still the outermost function. Mods loaded
+    -- after PokePC may legitimately wrap these methods and must not be erased.
+    if SpriteRenderer.resolveImage == wrappedResolveImage and origResolveImage then
       SpriteRenderer.resolveImage = origResolveImage
     end
-    if SpriteRenderer.draw == SpriteRenderer.draw and origSpriteDraw then
+    if SpriteRenderer.draw == wrappedSpriteDraw and origSpriteDraw then
       SpriteRenderer.draw = origSpriteDraw
+    end
+    if PartyMenu.draw == wrappedPartyMenuDraw and origPartyMenuDraw then
+      PartyMenu.draw = origPartyMenuDraw
+    end
+    if PartyMenu.update == wrappedPartyMenuUpdate and origPartyMenuUpdate then
+      PartyMenu.update = origPartyMenuUpdate
+    end
+    if yellowBattleState and yellowBattleState.newWild == wrappedNewWild
+       and originalNewWild then
+      yellowBattleState.newWild = originalNewWild
     end
     if rawget(PikachuFollower, STATE_KEY) == state then
       rawset(PikachuFollower, STATE_KEY, nil)
@@ -629,6 +710,7 @@ return function(mod)
     mod.exports.supported = true
     mod.exports.activeMon = function(game) return getActiveFollowerMon(game, true) end
     mod.exports.assetPath = assetPath
+    mod.exports.dexForSpecies = dexForSpecies
     mod.exports.shouldSpawn = shouldSpawn
     mod.exports.sync = syncLiveFollowerDef
     mod.exports.select = selectFollower

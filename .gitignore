@@ -1,1 +1,3 @@
 *_zone.Identifier
+__pycache__/
+*.pyc

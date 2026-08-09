@@ -1,12 +1,13 @@
-# PokéPC Followers Mod — VoxelFixed Red/Blue/Yellow
+# PokéPC Followers Mod — Gen 1 + Gen 2
 
-An all-species overworld follower mod for **Pokémon Yellow (Gen 1 Recomp)**. This mod allows every single Gen 1 Pokémon to walk behind you in full overworld color as your companion!
+An all-species overworld follower mod for **Pokémon Red, Blue, and Yellow (Gen1Recomp)**. Every Generation I Pokémon is supported out of the box, and all Generation II Pokémon are supported when a compatible species expansion such as **Crystal 251** is enabled.
 
 ---
 
 ## 🌟 Features
 
-* **All 151 Gen 1 Pokémon Supported**: Every single Gen 1 Pokémon (from Bulbasaur `#001` to Mew `#151`) has full overworld sprite animations!
+* **All 251 Gen 1 + Gen 2 Pokémon Supported**: Every Pokémon from Bulbasaur `#001` to Celebi `#251` has full overworld sprite animations.
+* **Crystal 251 Compatibility**: Johto species are detected from Crystal 251's registered Pokédex data instead of relying on a second hard-coded species table.
 * **Automatic Party Slot 1 Follower**: By default, your overworld follower automatically mirrors whichever Pokémon is in **Party Slot 1**. Swapping your party order or receiving a new lead Pokémon dynamically updates your overworld companion.
 * **Party Menu UI Selection**:
   1. Press `START` -> select `POKéMON`.
@@ -37,11 +38,15 @@ An all-species overworld follower mod for **Pokémon Yellow (Gen 1 Recomp)**. Th
    ```
 2. Launch `gen1recomp` — the mod will load automatically!
 
+To use Pokémon `#152`–`#251`, install and import **Crystal 251**, then enable both mods. PokéPC Followers remains fully usable by itself for the original 151 species.
+
 ---
 
 ## 👥 Credits & Acknowledgments
 
-* **Overworld Sprites**: Huge credit and special thanks to ShockSlayer and the makers of the legendary ROM hack **Pokémon Crystal Clear** for creating and providing the incredible Gen 1 & Gen 2 Pokémon overworld sprite sheets!
+* **Generation I Overworld Sprites**: Huge credit and special thanks to ShockSlayer and the makers of the legendary ROM hack **Pokémon Crystal Clear** for the original GSC-style follower sheets.
+* **Generation II Runtime Sheets**: Derived from the HGSS/PokeMMO follower sheets distributed by [Wilds of Kanto](https://github.com/YoDrehDenSwagAuf/overworld-spawn-mod). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+* **Crystal 251 Integration**: Species identities and National Pokédex numbers are read from [Crystal 251](https://github.com/Deftones565/gen1recomp-mod-crystal-251) at runtime. No Crystal ROM content is bundled by this mod.
 * **Development**: Built with **vibe coding** and pair programming for the `pokemon-gen1-recomp` project.
 
 ## Voxel compatibility
@@ -54,6 +59,15 @@ registered Charmander fallback sheet for every follower.
 The follower sprite is also marked `trueColor` for render-pipeline use so the
 voxel renderer does not run the fixed `SPRITE_PIKACHU` image through its palette
 bake.
+
+## Inter-mod compatibility
+
+Version 0.6.0 keeps its renderer, party-menu, follower and Yellow encounter
+wrappers chain-safe. During a hot reload it restores a function only when its
+own wrapper is still the active outermost function, so wrappers installed by
+later-loading mods are not overwritten. This is intended for stacks containing
+Dramatic Sky Ride, Kanto Dive or the standalone Dramatic Deep Dive; those mods
+remain responsible for their own mount and underwater movement rules.
 
 ## Experimental Red/Blue + Voxel Fix
 
