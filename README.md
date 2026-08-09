@@ -15,6 +15,7 @@ An all-species overworld follower mod for **Pokémon Red, Blue, and Yellow (Gen1
   3. Select the new **`FOLLOWER`** option.
   4. Your chosen Pokémon will instantly become your active follower!
 * **Full-Color Overworld Graphics**: Sprites render with rich true-color graphics directly over 100% colorized overworld terrain tiles (grass, paths, dirt, water) with zero background artifacts.
+* **Pokédex-Proportional Sizes**: Followers use the height recorded in their Pokédex entry. A compressed and capped scale keeps tiny Pokémon readable and very large Pokémon impressive without changing collision or movement.
 * **Smooth Movement Mechanics**:
   * Smooth 1-tile trailing behind the player.
   * In-place turning (no teleporting or jumping tiles when turning around).
@@ -40,6 +41,13 @@ An all-species overworld follower mod for **Pokémon Red, Blue, and Yellow (Gen1
 
 To use Pokémon `#152`–`#251`, install and import **Crystal 251**, then enable both mods. PokéPC Followers remains fully usable by itself for the original 151 species.
 
+### Follower size options
+
+`POKEDEX SIZES` enables or disables proportional follower sizes. `FOLLOWER SIZE`
+adjusts the result globally from 75% to 125%. The default 100% setting uses the
+Pokédex-derived scale. Only the visual sprite changes: followers still occupy one
+logical map cell and retain their normal movement and interactions.
+
 ---
 
 ## 👥 Credits & Acknowledgments
@@ -57,7 +65,8 @@ registered Charmander fallback sheet for every follower.
 
 The follower sprite is also marked `trueColor` for render-pipeline use so the
 voxel renderer does not run the fixed `SPRITE_PIKACHU` image through its palette
-bake.
+bake. Pokédex-derived sizes are forwarded to the billboard and shadow meshes used
+by Dramatic Shape, Dramaless Shape and Battle Art Voxel Fork.
 
 ## Inter-mod compatibility
 

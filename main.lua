@@ -35,6 +35,48 @@ return function(mod)
   local STATE_KEY = "__pokepcFollowersUniversal"
   local OPPOSITE = { up = "down", down = "up", left = "right", right = "left" }
 
+  -- A human-sized 1.70 m Pokemon keeps the original 16 px follower card.
+  -- Square-root compression preserves the Pokedex ordering without letting
+  -- long species such as Onix cover most of the map. The final scale is
+  -- quantized to eighths for steadier nearest-neighbour pixel rendering.
+  local POKEDEX_REFERENCE_METERS = 1.70
+  local MIN_FOLLOWER_SCALE = 0.625
+  local MAX_FOLLOWER_SCALE = 2.50
+  local SCALE_QUANTUM = 0.125
+
+  if mod.options and mod.options.define then
+    mod.options:define({
+      {
+        key = "pokedex_follower_sizes",
+        type = "toggle",
+        label = "POKEDEX SIZES",
+        default = true,
+        help = "Scale follower sprites from each Pokemon's Pokedex height.",
+      },
+      {
+        key = "follower_size_percent",
+        type = "number",
+        label = "FOLLOWER SIZE",
+        default = 100,
+        min = 75,
+        max = 125,
+        step = 5,
+        help = "Adjust every Pokedex-derived follower size.",
+      },
+    })
+  end
+
+  local function optionValue(key, fallback)
+    if not (mod.options and mod.options.get) then return fallback end
+    local ok, value = pcall(mod.options.get, mod.options, key)
+    if not ok or value == nil then return fallback end
+    return value
+  end
+
+  local function clamp(value, minimum, maximum)
+    return math.max(minimum, math.min(maximum, value))
+  end
+
   -- ----------------------------------------------------------------------
   -- 1. Asset path helpers (dex-numbered files, e.g. follower_004.png)
   -- ----------------------------------------------------------------------
@@ -102,6 +144,45 @@ return function(mod)
       return dex
     end
     return nil
+  end
+
+  local function pokemonDefForSpecies(species)
+    local pokemon = Game and Game.data and Game.data.pokemon
+    if type(pokemon) ~= "table" then return nil end
+    local key = tostring(species or FALLBACK_SPECIES):upper()
+    if pokemon[key] then return pokemon[key] end
+
+    local dex = dexForSpecies(key)
+    if not dex then return nil end
+    for _, def in pairs(pokemon) do
+      if type(def) == "table" and tonumber(def.dex) == dex then return def end
+    end
+    return nil
+  end
+
+  local function pokedexHeightMeters(species)
+    local def = pokemonDefForSpecies(species)
+    local entry = def and def.dexEntry
+    local feet = entry and tonumber(entry.heightFt)
+    local inches = entry and tonumber(entry.heightIn)
+    if feet == nil or inches == nil then return nil end
+    local totalInches = feet * 12 + inches
+    if totalInches <= 0 then return nil end
+    return totalInches * 0.0254
+  end
+
+  local function followerVisualScale(species)
+    if optionValue("pokedex_follower_sizes", true) ~= true then return 1 end
+    local meters = pokedexHeightMeters(species)
+    if not meters then return 1 end
+
+    local scale = math.sqrt(meters / POKEDEX_REFERENCE_METERS)
+    scale = clamp(scale, MIN_FOLLOWER_SCALE, MAX_FOLLOWER_SCALE)
+    local percent = tonumber(optionValue("follower_size_percent", 100)) or 100
+    percent = clamp(percent, 75, 125)
+    scale = clamp(scale * percent / 100,
+      MIN_FOLLOWER_SCALE, MAX_FOLLOWER_SCALE)
+    return math.floor(scale / SCALE_QUANTUM + 0.5) * SCALE_QUANTUM
   end
 
   local function assetPath(species)
@@ -214,6 +295,8 @@ return function(mod)
     frames = 6,
     walker = true,
     trueColor = colorMode(),
+    pokepcFollowerSpecies = FALLBACK_SPECIES,
+    pokepcFollowerVisualScale = followerVisualScale(FALLBACK_SPECIES),
   }
 
   if mod.content.sprites:get(SPRITE_ID) then
@@ -280,6 +363,8 @@ return function(mod)
     def.frames = 6
     def.walker = true
     def.trueColor = colorMode()
+    def.pokepcFollowerSpecies = species
+    def.pokepcFollowerVisualScale = followerVisualScale(species)
     return def, species
   end
 
@@ -298,6 +383,7 @@ return function(mod)
     if not npc then return nil end
 
     local newImage = getFollowerImage(species)
+    local newScale = followerVisualScale(species)
     if npc._pokepcFollowerSpecies ~= species or not npc.sprite or npc.sprite.image ~= newImage then
       npc.sprite = SpriteRenderer.new(def, npc.id)
       npc._pokepcFollowerSpecies = species
@@ -307,7 +393,10 @@ return function(mod)
       npc.sprite.def.frames = 6
       npc.sprite.def.walker = true
       npc.sprite.def.trueColor = colorMode()
+      npc.sprite.def.pokepcFollowerSpecies = species
+      npc.sprite.def.pokepcFollowerVisualScale = newScale
     end
+    npc._pokepcFollowerVisualScale = newScale
     return npc
   end
 
@@ -419,12 +508,117 @@ return function(mod)
       local drawX = flip and (x + 16) or x
       local flipSx = flip and -1 or 1
 
-      PaletteFX.markSpriteRedraw(followerImg, quad, drawX, y, flipSx, nil, false)
+      local scale = followerVisualScale(activeMon.species)
+      if math.abs(scale - 1) < 0.0001
+         or not (love and love.graphics and love.graphics.draw) then
+        PaletteFX.markSpriteRedraw(followerImg, quad, drawX, y, flipSx, nil, false)
+        return
+      end
+
+      -- Pivot around the feet so changing size never makes the follower float
+      -- or sink into the map. The logical entity remains one 16x16 cell.
+      local anchorX, anchorY = x + 8, y + 16
+      local w, h = 16 * scale, 16 * scale
+      if self.def.trueColor and PaletteFX.markTrueColor then
+        PaletteFX.markTrueColor(math.floor(anchorX - w / 2),
+          math.floor(anchorY - h), math.ceil(w), math.ceil(h))
+      end
+      local sx = flip and -scale or scale
+      love.graphics.draw(followerImg, quad, anchorX, anchorY,
+        0, sx, scale, 8, 16)
       return
     end
     return origSpriteDraw(self, px, py, camX, camY, facing, walkPhase, stepFlip)
   end
   SpriteRenderer.draw = wrappedSpriteDraw
+
+  -- Dramatic Shape and its maintained forks bypass SpriteRenderer.draw in
+  -- voxel mode and build a billboard directly from the sprite definition.
+  -- Compose a narrowly tagged mesh hook with any existing mount-size hook so
+  -- PokéPC Followers, Dramatic Sky Ride and the voxel provider can coexist.
+  local function dramaticModule(name)
+    if not mod.find then return nil end
+    local providerIds = {
+      "BATTLE_ART_VOXEL_FORK", "DRAMALESS_SHAPE", "DRAMATIC_SHAPE"
+    }
+    for _, id in ipairs(providerIds) do
+      local okHandle, handle = pcall(mod.find, mod, id)
+      local lib = okHandle and handle and handle.exports and handle.exports.lib
+      if type(lib) == "table" and type(lib.require) == "function" then
+        local okModule, value = pcall(lib.require, name)
+        if okModule then return value end
+      end
+    end
+    return nil
+  end
+
+  local function installFollowerVoxelSizeHook()
+    local billboards = dramaticModule("SpriteBillboards")
+    local voxel3D = dramaticModule("Voxel3D")
+    if not (billboards and voxel3D and voxel3D.newMesh
+            and voxel3D.pushQuad) then return false end
+
+    local previousHook = billboards.pokepcFollowerSizeHook
+    if previousHook then
+      if previousHook.clear then pcall(previousHook.clear) end
+      return true
+    end
+
+    local meshes = {}
+    local function clearMeshes()
+      for _, mesh in pairs(meshes) do
+        if mesh and mesh.release then pcall(mesh.release, mesh) end
+      end
+      meshes = {}
+    end
+
+    local function buildCard(def, frame, scale)
+      local okImage, image = pcall(Assets.image, def.image)
+      if not (okImage and image) then return nil end
+      local iw, ih = image:getDimensions()
+      local fy = (tonumber(frame) or 0) * 16
+      if fy + 16 > ih then fy = 0 end
+      local u0, u1 = 0.02 / iw, (16 - 0.02) / iw
+      local v0, v1 = (fy + 0.05) / ih, (fy + 15.95) / ih
+      local halfWidth = 8 * scale
+      local x0, x1 = 8 - halfWidth, 8 + halfWidth
+      local y1 = 16 * scale
+      local vertices = {
+        { x0, 0,  0, u0, v1, 1 }, { x1, 0,  0, u1, v1, 1 },
+        { x1, y1, 0, u1, v0, 1 }, { x0, y1, 0, u0, v0, 1 },
+      }
+      local indices = {}
+      voxel3D.pushQuad(indices, 0)
+      local okMesh, mesh = pcall(voxel3D.newMesh, vertices, indices)
+      return okMesh and mesh or nil
+    end
+
+    local rawMesh = billboards.mesh
+    local rawShadowQuad = billboards.shadowQuad
+    local function scaledMesh(def, frame, fallback)
+      local species = def and def.pokepcFollowerSpecies
+      local scale = def and tonumber(def.pokepcFollowerVisualScale)
+      if not species or not scale or math.abs(scale - 1) < 0.0001 then
+        return fallback(def, frame)
+      end
+      local key = table.concat({ tostring(def.image), tostring(frame),
+        tostring(species), string.format("%.4f", scale) }, "#")
+      if meshes[key] == nil then
+        meshes[key] = buildCard(def, frame, scale) or false
+      end
+      return meshes[key] or fallback(def, frame)
+    end
+
+    billboards.mesh = function(def, frame)
+      return scaledMesh(def, frame, rawMesh)
+    end
+    billboards.shadowQuad = function(def, frame)
+      return scaledMesh(def, frame, rawShadowQuad)
+    end
+    billboards.pokepcFollowerSizeHook = { clear = clearMeshes }
+    if Assets.register then Assets.register(clearMeshes) end
+    return true
+  end
 
   -- ----------------------------------------------------------------------
   -- 9. PikachuFollower function wrappers
@@ -703,6 +897,24 @@ return function(mod)
   end
   rawset(PikachuFollower, STATE_KEY, state)
 
+  -- Install immediately for hot reloads, then retry after every enabled mod
+  -- has published its exports during a normal startup.
+  installFollowerVoxelSizeHook()
+  if mod.events then
+    mod.events:once("mods.loaded", installFollowerVoxelSizeHook)
+    mod.events:on("mod.options_changed", function(payload)
+      if not (payload and payload.mod == mod.id) then return end
+      local key = tostring(payload.key or "")
+      if key ~= "pokedex_follower_sizes" and key ~= "follower_size_percent" then
+        return
+      end
+      local mon = getActiveFollowerMon(Game, false)
+      if mon then configureSpriteDef(Game, mon) end
+      pcall(syncLiveFollowerDef, Game, Game and Game.overworld)
+      installFollowerVoxelSizeHook()
+    end)
+  end
+
   -- ----------------------------------------------------------------------
   -- 14. Mod exports
   -- ----------------------------------------------------------------------
@@ -711,6 +923,8 @@ return function(mod)
     mod.exports.activeMon = function(game) return getActiveFollowerMon(game, true) end
     mod.exports.assetPath = assetPath
     mod.exports.dexForSpecies = dexForSpecies
+    mod.exports.pokedexHeightMeters = pokedexHeightMeters
+    mod.exports.followerVisualScale = followerVisualScale
     mod.exports.shouldSpawn = shouldSpawn
     mod.exports.sync = syncLiveFollowerDef
     mod.exports.select = selectFollower
