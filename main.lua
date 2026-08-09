@@ -36,7 +36,7 @@ return function(mod)
   local OPPOSITE = { up = "down", down = "up", left = "right", right = "left" }
 
   -- ----------------------------------------------------------------------
-  -- 1. Asset path helpers (dex‑numbered files, e.g. follower_004.png)
+  -- 1. Asset path helpers (dex-numbered files, e.g. follower_004.png)
   -- ----------------------------------------------------------------------
   local speciesToDex = {
     BULBASAUR=1, IVYSAUR=2, VENUSAUR=3, CHARMANDER=4, CHARMELEON=5, CHARIZARD=6,
@@ -66,11 +66,49 @@ return function(mod)
     ZAPDOS=145, MOLTRES=146, DRATINI=147, DRAGONAIR=148, DRAGONITE=149, MEWTWO=150, MEW=151
   }
 
-  local function assetPath(species)
+  local MAX_FOLLOWER_DEX = 251
+
+  -- Other content mods can register additional species before this mod loads.
+  -- Crystal 251 is an optional dependency, so its Johto records are visible
+  -- here whenever it is enabled and has completed its ROM import.
+  if mod.content and mod.content.pokemon and mod.content.pokemon.each then
+    pcall(function()
+      for id, def in mod.content.pokemon:each() do
+        local dex = def and tonumber(def.dex)
+        if type(id) == "string" and dex and dex >= 1 and dex <= MAX_FOLLOWER_DEX then
+          speciesToDex[id:upper()] = math.floor(dex)
+        end
+      end
+    end)
+  end
+
+  local function dexForSpecies(species)
+    local numeric = tonumber(species)
+    if numeric and numeric >= 1 and numeric <= MAX_FOLLOWER_DEX then
+      return math.floor(numeric)
+    end
+
     local key = tostring(species or FALLBACK_SPECIES):upper()
     local dex = speciesToDex[key]
+    if dex then return dex end
+
+    -- Runtime fallback for species supplied by a mod that loaded after us.
+    local pokemon = Game and Game.data and Game.data.pokemon
+    local def = pokemon and pokemon[key]
+    dex = def and tonumber(def.dex)
+    if dex and dex >= 1 and dex <= MAX_FOLLOWER_DEX then
+      dex = math.floor(dex)
+      speciesToDex[key] = dex
+      return dex
+    end
+    return nil
+  end
+
+  local function assetPath(species)
+    local key = tostring(species or FALLBACK_SPECIES):upper()
+    local dex = dexForSpecies(key)
     local filename = dex and string.format("follower_%03d.png", dex)
-                  or "follower_CHARMANDER.png"
+                  or "follower_004.png"
     return mod.path .. "/assets/sprites/" .. filename
   end
 
@@ -78,7 +116,7 @@ return function(mod)
   local followerImgCache = {}
   local function getFollowerImage(species)
     local key = tostring(species or FALLBACK_SPECIES):upper()
-    local dex = speciesToDex[key] or 4
+    local dex = dexForSpecies(key) or 4
     local dexStr = string.format("%03d", dex)
     if not followerImgCache[dexStr] then
       local path = assetPath(key)
@@ -629,6 +667,7 @@ return function(mod)
     mod.exports.supported = true
     mod.exports.activeMon = function(game) return getActiveFollowerMon(game, true) end
     mod.exports.assetPath = assetPath
+    mod.exports.dexForSpecies = dexForSpecies
     mod.exports.shouldSpawn = shouldSpawn
     mod.exports.sync = syncLiveFollowerDef
     mod.exports.select = selectFollower
