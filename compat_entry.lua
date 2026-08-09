@@ -1,7 +1,7 @@
 -- Compatibility entry point.
--- Keeps the original runtime untouched, then publishes a stable sprite-provider
--- API that companion mods can use without taking ownership of the follower
--- lifecycle.
+-- Runs the original implementation, then publishes a stable sprite-provider
+-- API. When Wilds of Kanto is present, PokéPC yields follower-runtime
+-- ownership while keeping its assets and provider exports available.
 
 local function loadOriginal(mod)
   local source, readErr = mod:read("main.lua")
@@ -66,9 +66,16 @@ return function(mod)
   ex.providerOnly = false
 
   local function refreshProviderMode()
-    if not mod.find then return end
+    if not mod.find then return false end
     local ok, wilds = pcall(mod.find, mod, "overworld_wild_spawns")
     ex.providerOnly = ok and wilds ~= nil or false
+    if ex.providerOnly and type(ex.restore) == "function" then
+      -- The public restore is deliberately cooperative: it removes PokéPC's
+      -- direct runtime wrappers only when they are still the wrappers it owns.
+      -- Assets, content registrations and exports remain available.
+      pcall(ex.restore)
+    end
+    return ex.providerOnly
   end
 
   refreshProviderMode()
