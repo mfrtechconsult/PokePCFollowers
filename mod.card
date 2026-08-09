@@ -2,7 +2,7 @@
   "title": "PokéPC Followers Mod",
   "summary": "All 251 Gen 1 and Gen 2 overworld followers with Crystal 251 and voxel/tilt compatibility.",
   "author": "Antigravity & gamecorner33",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "tags": [
     "graphics",
     "followers",
@@ -10,6 +10,7 @@
   ],
   "features": [
     "All 251 Gen 1 and Gen 2 Pokémon overworld sprites supported",
+    "Native GSC-style Generation II follower sheets without HGSS downscaling",
     "Automatic Crystal 251 species detection",
     "Party Slot 1 default follower with automatic lead switching",
     "Party Menu 'FOLLOWER' UI option for explicit follower selection",

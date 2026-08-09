@@ -44,8 +44,7 @@ To use Pokémon `#152`–`#251`, install and import **Crystal 251**, then enable
 
 ## 👥 Credits & Acknowledgments
 
-* **Generation I Overworld Sprites**: Huge credit and special thanks to ShockSlayer and the makers of the legendary ROM hack **Pokémon Crystal Clear** for the original GSC-style follower sheets.
-* **Generation II Runtime Sheets**: Derived from the HGSS/PokeMMO follower sheets distributed by [Wilds of Kanto](https://github.com/YoDrehDenSwagAuf/overworld-spawn-mod). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+* **Generation I + II Overworld Sprites**: Huge credit and special thanks to ShockSlayer, the makers of the legendary ROM hack **Pokémon Crystal Clear**, and the PokéPC / Followers EX lineage for the native GSC-style follower sheets. The Generation II sheets are distributed in the built-in Poke Followers pack from [Wilds of Kanto](https://github.com/YoDrehDenSwagAuf/overworld-spawn-mod). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 * **Crystal 251 Integration**: Species identities and National Pokédex numbers are read from [Crystal 251](https://github.com/Deftones565/gen1recomp-mod-crystal-251) at runtime. No Crystal ROM content is bundled by this mod.
 * **Development**: Built with **vibe coding** and pair programming for the `pokemon-gen1-recomp` project.
 
@@ -62,7 +61,7 @@ bake.
 
 ## Inter-mod compatibility
 
-Version 0.6.0 keeps its renderer, party-menu, follower and Yellow encounter
+Version 0.6.1 keeps its renderer, party-menu, follower and Yellow encounter
 wrappers chain-safe. During a hot reload it restores a function only when its
 own wrapper is still the active outermost function, so wrappers installed by
 later-loading mods are not overwritten. This is intended for stacks containing

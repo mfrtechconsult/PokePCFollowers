@@ -1,7 +1,7 @@
 {
   "id": "PokePCFollowers_VoxelMerge",
   "name": "PokéPC Followers (Voxel Merge)",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "entry": "main.lua",
   "author": "Antigravity & gamecorner33",
   "description": "All 251 Gen 1 and Gen 2 overworld followers with Crystal 251 and full 3D Voxel compatibility for Red, Blue, and Yellow.",
