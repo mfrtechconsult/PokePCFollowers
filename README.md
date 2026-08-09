@@ -15,7 +15,7 @@ An all-species overworld follower mod for **Pokémon Red, Blue, and Yellow (Gen1
   3. Select the new **`FOLLOWER`** option.
   4. Your chosen Pokémon will instantly become your active follower!
 * **Full-Color Overworld Graphics**: Sprites render with rich true-color graphics directly over 100% colorized overworld terrain tiles (grass, paths, dirt, water) with zero background artifacts.
-* **Pokédex-Proportional Sizes**: Followers use the height recorded in their Pokédex entry. A compressed and capped scale keeps tiny Pokémon readable and very large Pokémon impressive without changing collision or movement.
+* **Pokédex-Proportional Sizes**: Followers use the height recorded in their Pokédex entry. A progressive and capped scale keeps the smallest Pokémon at least 11 px tall while making very large Pokémon clearly more imposing, without changing collision or movement.
 * **Smooth Movement Mechanics**:
   * Smooth 1-tile trailing behind the player.
   * In-place turning (no teleporting or jumping tiles when turning around).

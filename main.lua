@@ -36,13 +36,15 @@ return function(mod)
   local OPPOSITE = { up = "down", down = "up", left = "right", right = "left" }
 
   -- A human-sized 1.70 m Pokemon keeps the original 16 px follower card.
-  -- Square-root compression preserves the Pokedex ordering without letting
-  -- long species such as Onix cover most of the map. The final scale is
-  -- quantized to eighths for steadier nearest-neighbour pixel rendering.
+  -- Power-curve compression preserves the Pokedex ordering without letting
+  -- long species such as Onix cover most of the map. A readable floor keeps
+  -- the smallest species visible, and one-pixel steps keep nearby sizes
+  -- visually coherent with nearest-neighbour rendering.
   local POKEDEX_REFERENCE_METERS = 1.70
-  local MIN_FOLLOWER_SCALE = 0.625
+  local POKEDEX_SCALE_EXPONENT = 0.40
+  local MIN_FOLLOWER_SCALE = 0.6875
   local MAX_FOLLOWER_SCALE = 2.50
-  local SCALE_QUANTUM = 0.125
+  local SCALE_QUANTUM = 0.0625
 
   if mod.options and mod.options.define then
     mod.options:define({
@@ -176,7 +178,7 @@ return function(mod)
     local meters = pokedexHeightMeters(species)
     if not meters then return 1 end
 
-    local scale = math.sqrt(meters / POKEDEX_REFERENCE_METERS)
+    local scale = (meters / POKEDEX_REFERENCE_METERS) ^ POKEDEX_SCALE_EXPONENT
     scale = clamp(scale, MIN_FOLLOWER_SCALE, MAX_FOLLOWER_SCALE)
     local percent = tonumber(optionValue("follower_size_percent", 100)) or 100
     percent = clamp(percent, 75, 125)
