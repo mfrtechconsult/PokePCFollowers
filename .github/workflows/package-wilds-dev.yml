@@ -1,0 +1,46 @@
+name: Package Wilds dev build
+
+on:
+  push:
+    branches:
+      - compat/wilds-of-kanto
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build installable ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(python3 -c 'import json; print(json.load(open("manifest.json", encoding="utf-8"))["version"])')
+          ZIP="pokepc-followers-${VERSION}-wilds-dev.zip"
+          zip -qr "$ZIP" . \
+            -x '.git/*' '.github/*' "$ZIP" 'mod.zip' '.gitignore' '.luarc.json' \
+               '*Zone.Identifier' '*/__pycache__/*' '*.pyc' '*.pyo' '.DS_Store' 'Thumbs.db'
+          unzip -Z1 "$ZIP" | grep -qx 'manifest.json'
+          unzip -Z1 "$ZIP" | grep -qx 'compat_entry.lua'
+          unzip -Z1 "$ZIP" | grep -qx 'main.lua'
+          if unzip -Z1 "$ZIP" | grep -Eq '(^|/)mod\.zip$|Zone\.Identifier$|^\.gitignore$|^\.luarc\.json$'; then
+            echo "Unexpected repository-only file found in PokePC package" >&2
+            exit 1
+          fi
+          unzip -t "$ZIP"
+          echo "ZIP=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Upload dev build
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokepc-followers-wilds-dev
+          path: ${{ env.ZIP }}
+          if-no-files-found: error
+          retention-days: 7
