@@ -25,8 +25,15 @@ jobs:
           VERSION=$(python3 -c 'import json; print(json.load(open("manifest.json", encoding="utf-8"))["version"])')
           ZIP="pokepc-followers-${VERSION}-wilds-dev.zip"
           zip -qr "$ZIP" . \
-            -x '.git/*' '.github/*' "$ZIP" "*/__pycache__/*" "*.pyc" "*.pyo" ".DS_Store" "Thumbs.db"
+            -x '.git/*' '.github/*' "$ZIP" 'mod.zip' '.gitignore' '.luarc.json' \
+               '*Zone.Identifier' '*/__pycache__/*' '*.pyc' '*.pyo' '.DS_Store' 'Thumbs.db'
           unzip -Z1 "$ZIP" | grep -qx 'manifest.json'
+          unzip -Z1 "$ZIP" | grep -qx 'compat_entry.lua'
+          unzip -Z1 "$ZIP" | grep -qx 'main.lua'
+          if unzip -Z1 "$ZIP" | grep -Eq '(^|/)mod\.zip$|Zone\.Identifier$|^\.gitignore$|^\.luarc\.json$'; then
+            echo "Unexpected repository-only file found in PokePC package" >&2
+            exit 1
+          fi
           unzip -t "$ZIP"
           echo "ZIP=$ZIP" >> "$GITHUB_ENV"
 
