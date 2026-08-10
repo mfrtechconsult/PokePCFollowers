@@ -12,5 +12,6 @@
   ],
   "permissions": [
     "engine_internals"
-  ]
+  ],
+  "github": "mfrtechconsult/PokePCFollowers"
 }
