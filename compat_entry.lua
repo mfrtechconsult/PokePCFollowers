@@ -3,6 +3,9 @@
 -- API. When Wilds of Kanto is present, PokéPC yields follower-runtime
 -- ownership while keeping its assets and provider exports available.
 
+local PROVIDER_REPOSITORY = "mfrtechconsult/PokePCFollowers"
+local PROVIDER_API = 1
+
 local function loadOriginal(mod)
   local source, readErr = mod:read("main.lua")
   if not source then
@@ -26,6 +29,15 @@ return function(mod)
 
   local ex = mod.exports
   if not ex then return end
+
+  -- Stable identity for consumers such as Dramatic Sky Ride. The mod id is
+  -- intentionally inherited from upstream for save/install compatibility, so
+  -- repository metadata is the non-breaking way to identify this maintained
+  -- compatibility fork at runtime.
+  ex.providerRepository = PROVIDER_REPOSITORY
+  ex.spriteProviderApi = PROVIDER_API
+  ex.spriteProviderId = mod.id
+  ex.providerGenerations = { 1, 2 }
 
   -- Common contract shared with Wilds of Kanto. Consumers should detect this
   -- capability instead of depending on a specific follower runtime.
@@ -55,6 +67,8 @@ return function(mod)
       walker = true,
       trueColor = trueColor,
       providerId = mod.id,
+      providerRepository = PROVIDER_REPOSITORY,
+      providerApi = PROVIDER_API,
       role = opts.role or "follower",
       surface = opts.surface or "land",
       species = species,
@@ -62,7 +76,6 @@ return function(mod)
     }
   end
 
-  ex.spriteProviderId = mod.id
   ex.providerOnly = false
 
   local function refreshProviderMode()
