@@ -1,4 +1,4 @@
--- PokePC Followers – Unified Mod for Pokémon Red, Blue, Yellow (Gen1Recomp)
+-- PokePC Followers – Unified Mod for Pokémon Red, Blue, Yellow and Gold
 -- Merges:
 --   • Full follower mechanics (draw/resolve overrides) from main0.0.1
 --   • Red/Blue support, persistent selection, talk wrapper from main0.0.2
@@ -8,18 +8,13 @@
 return function(mod)
   local GameVersion = require("src.core.GameVersion")
   local version = GameVersion.get()
-
-  -- Only Red, Blue, and Yellow are supported
-  if version ~= "red" and version ~= "blue" and version ~= "yellow" then
-    if mod.log then mod.log:info("PokéPC Followers: unsupported version %s", tostring(version)) end
-    if mod.exports then mod.exports.supported = false end
-    return
-  end
+  local generation = GameVersion.generation()
+  local isGen2 = generation == 2
+  local isYellow = GameVersion.isYellow()
 
   print(string.format("[PokePCFollowers] Initializing for %s", version:upper()))
 
   -- Core modules
-  local Game = require("src.core.Game")
   local PaletteFX = require("src.render.PaletteFX")
   local SpriteRenderer = require("src.render.SpriteRenderer")
   local Assets = require("src.render.Assets")
@@ -28,11 +23,29 @@ return function(mod)
   local Sound = require("src.core.Sound")
   local TextBox = require("src.render.TextBox")
   local PartyMenu = require("src.ui.PartyMenu")
+  local OverworldController = require("src.world.OverworldController")
+
+  -- mod.game is resolved lazily by the loader. Do not cache fields from it at
+  -- entry time: Gold's Game2 instance is not fully ready yet when mods load.
+  local function liveGame()
+    return mod.game
+  end
+
+  local function worldFor(game)
+    local world = game and (game.overworld or game.world)
+    if world then return world end
+    local worldApi = mod.world
+    return worldApi and worldApi.overworld and worldApi:overworld() or nil
+  end
+
+  local function spritesFor(game)
+    local data = game and game.data
+    return data and (data.sprites or data.gen2Sprites) or nil
+  end
 
   -- Constants
   local FALLBACK_SPECIES = "CHARMANDER"
   local SPRITE_ID = "SPRITE_PIKACHU"
-  local STATE_KEY = "__pokepcFollowersUniversal"
   local OPPOSITE = { up = "down", down = "up", left = "right", right = "left" }
 
   -- A human-sized 1.70 m Pokemon keeps the original 16 px follower card.
@@ -137,7 +150,8 @@ return function(mod)
     if dex then return dex end
 
     -- Runtime fallback for species supplied by a mod that loaded after us.
-    local pokemon = Game and Game.data and Game.data.pokemon
+    local game = liveGame()
+    local pokemon = game and game.data and game.data.pokemon
     local def = pokemon and pokemon[key]
     dex = def and tonumber(def.dex)
     if dex and dex >= 1 and dex <= MAX_FOLLOWER_DEX then
@@ -149,7 +163,8 @@ return function(mod)
   end
 
   local function pokemonDefForSpecies(species)
-    local pokemon = Game and Game.data and Game.data.pokemon
+    local game = liveGame()
+    local pokemon = game and game.data and game.data.pokemon
     if type(pokemon) ~= "table" then return nil end
     local key = tostring(species or FALLBACK_SPECIES):upper()
     if pokemon[key] then return pokemon[key] end
@@ -163,10 +178,21 @@ return function(mod)
   end
 
   local function pokedexHeightMeters(species)
+    local key = tostring(species or FALLBACK_SPECIES):upper()
     local def = pokemonDefForSpecies(species)
     local entry = def and def.dexEntry
     local feet = entry and tonumber(entry.heightFt)
     local inches = entry and tonumber(entry.heightIn)
+    if feet == nil or inches == nil then
+      local game = liveGame()
+      local dex = game and game.data and game.data.gen2Pokedex
+      local gen2Entry = dex and dex.entries and dex.entries[key]
+      local encoded = gen2Entry and tonumber(gen2Entry.height)
+      if encoded then
+        feet = math.floor(encoded / 100)
+        inches = encoded % 100
+      end
+    end
     if feet == nil or inches == nil then return nil end
     local totalInches = feet * 12 + inches
     if totalInches <= 0 then return nil end
@@ -270,18 +296,26 @@ return function(mod)
   -- 3. Purge any follower entities from the overworld
   -- ----------------------------------------------------------------------
   local function purgeFollowerEntities(ow)
-    if not (ow and ow.entities) then return end
-    local j = 1
-    for i = 1, #ow.entities do
-      local ent = ow.entities[i]
-      local isFollower = ent and (ent.id == "pikachu" or
-                                  (ent.sprite and ent.sprite.def and ent.sprite.def.id == SPRITE_ID))
-      if not isFollower then
-        ow.entities[j] = ent
-        j = j + 1
-      end
+    if not ow then return end
+    local function isFollower(ent)
+      return ent and (ent.pikachuFollower == true or ent.id == "pikachu" or
+        (ent.sprite and ent.sprite.def and ent.sprite.def.id == SPRITE_ID))
     end
-    for i = j, #ow.entities do ow.entities[i] = nil end
+    local function purge(list)
+      if type(list) ~= "table" then return end
+      local j = 1
+      for i = 1, #list do
+        local ent = list[i]
+        if not isFollower(ent) then
+          list[j] = ent
+          j = j + 1
+        end
+      end
+      for i = j, #list do list[i] = nil end
+    end
+    purge(ow.entities)
+    purge(ow.npcs)
+    if isFollower(ow.follower) then ow.follower = nil end
   end
 
   -- ----------------------------------------------------------------------
@@ -297,8 +331,7 @@ return function(mod)
     frames = 6,
     walker = true,
     trueColor = colorMode(),
-    pokepcFollowerSpecies = FALLBACK_SPECIES,
-    pokepcFollowerVisualScale = followerVisualScale(FALLBACK_SPECIES),
+    spriteType = isGen2 and "WALKING_SPRITE" or nil,
   }
 
   if mod.content.sprites:get(SPRITE_ID) then
@@ -312,37 +345,54 @@ return function(mod)
   -- ----------------------------------------------------------------------
   -- Patch mod.content.icons for each species
   if mod.content and mod.content.icons then
+    local icons = mod.content.icons
+    local function replaceOrRegister(id, value)
+      if icons:get(id) ~= nil then
+        icons:override(id, value)
+      else
+        icons:register(id, value)
+      end
+    end
     for species, dex in pairs(speciesToDex) do
       local dexStr = string.format("%03d", dex)
       local path = mod.path .. "/assets/sprites/follower_" .. dexStr .. ".png"
-      local iconDef = { image = path, width = 16, height = 16, frames = 1 }
       pcall(function()
-        mod.content.icons:patch(species, iconDef)
-        mod.content.icons:patch(dex, iconDef)
-        mod.content.icons:patch(dexStr, iconDef)
+        if isGen2 then
+          local iconId = "ICON_POKEPC_" .. dexStr
+          replaceOrRegister(iconId, {
+            id = iconId, image = path, width = 16, height = 16, frames = 1,
+          })
+          replaceOrRegister(species, iconId)
+        else
+          local iconDef = { image = path, frames = 1 }
+          replaceOrRegister(species, iconDef)
+          replaceOrRegister(dex, iconDef)
+          replaceOrRegister(dexStr, iconDef)
+        end
       end)
     end
     -- Also patch generic icon IDs used by the engine
-    local fallbacks = {
-      "ICON_MON", "ICON_BIRD", "ICON_QUADRUPED", "ICON_PIKACHU",
-      "ICON_FAIRY", "ICON_WATER", "ICON_BUG", "ICON_SNAKE",
-      "ICON_BALL", "ICON_HELIX", "ICON_GRASS"
-    }
-    for _, id in ipairs(fallbacks) do
-      pcall(function()
-        mod.content.icons:patch(id, {
-          image = mod.path .. "/assets/sprites/follower_CHARMANDER.png",
-          width = 16, height = 16, frames = 1
-        })
-      end)
+    -- These are Gen 1 assignment keys. On Gold the ICON_* ids are shared
+    -- sheets, so overriding them would also change unrelated species.
+    if not isGen2 then
+      local fallbacks = {
+        "ICON_MON", "ICON_BIRD", "ICON_QUADRUPED", "ICON_PIKACHU",
+        "ICON_FAIRY", "ICON_WATER", "ICON_BUG", "ICON_SNAKE",
+        "ICON_BALL", "ICON_HELIX", "ICON_GRASS"
+      }
+      for _, id in ipairs(fallbacks) do
+        pcall(function()
+          replaceOrRegister(id, {
+            image = mod.path .. "/assets/sprites/follower_CHARMANDER.png",
+            frames = 1,
+          })
+        end)
+      end
     end
   end
 
   -- Also patch the generated.icons table (used by some UI elements)
   local ok, baseIcons = pcall(require, "generated.icons")
-  if not ok then
-    ok, baseIcons = pcall(require, "src.generated.icons")
-  end
   if baseIcons and baseIcons.byDex and baseIcons.icons then
     for species, dex in pairs(speciesToDex) do
       local dexStr = string.format("%03d", dex)
@@ -357,7 +407,7 @@ return function(mod)
   -- 6. Core follower sprite configuration and live sync
   -- ----------------------------------------------------------------------
   local function configureSpriteDef(game, mon)
-    local sprites = game and game.data and game.data.sprites
+    local sprites = spritesFor(game)
     local def = sprites and sprites[SPRITE_ID]
     if not def or not mon then return nil end
     local species = mon.species or FALLBACK_SPECIES
@@ -422,7 +472,7 @@ return function(mod)
   end
 
   -- Hot‑reload cleanup
-  local previous = rawget(PikachuFollower, STATE_KEY)
+  local previous = PikachuFollower.__pokepcFollowersUniversal
   if previous and type(previous.restore) == "function" then
     pcall(previous.restore)
   end
@@ -433,26 +483,34 @@ return function(mod)
   local originalStarterInParty = PikachuFollower.starterInParty
   local vanillaShouldSpawn
   local vanillaOnMapEnteredShouldSpawn
+  local usedShouldSpawnSetter = false
 
   -- New shouldSpawn: works for all versions and checks our selection
   local function shouldSpawn(game, ow)
     local save = game and game.save
     if not (save and ow) then return false end
     if not save.party or #save.party == 0 then return false end
-    if save.onBike or (ow.player and ow.player.surfing) then return false end
-    if not (game.data and game.data.sprites and game.data.sprites[SPRITE_ID]) then
+    local playerState = ow.playerState
+    if save.onBike or (ow.player and ow.player.surfing)
+       or playerState == "bike" or playerState == "surf"
+       or playerState == "surf_pika" then return false end
+    local sprites = spritesFor(game)
+    if not (sprites and sprites[SPRITE_ID]) then
       return false
     end
     return getActiveFollowerMon(game, true) ~= nil
   end
 
-  -- Patch the upvalue in the original update function (also affects onMapEntered)
-  if originalUpdate then
+  -- Gold exposes a named seam. Gen 1 still needs the legacy upvalue fallback.
+  if type(PikachuFollower.setShouldSpawn) == "function" then
+    vanillaShouldSpawn = PikachuFollower.setShouldSpawn(shouldSpawn)
+    usedShouldSpawnSetter = true
+  elseif originalUpdate then
     local _, oldSpawn = replaceUpvalue(originalUpdate, "shouldSpawn", shouldSpawn)
     vanillaShouldSpawn = oldSpawn
   end
   -- Also patch onMapEntered directly in case it has its own closure
-  if originalOnMapEntered then
+  if not usedShouldSpawnSetter and originalOnMapEntered then
     pcall(function()
       local replaced, oldSpawn = replaceUpvalue(
         originalOnMapEntered, "shouldSpawn", shouldSpawn)
@@ -462,7 +520,7 @@ return function(mod)
 
   -- starterInParty – return any healthy mon, not just Pikachu
   local function wrappedStarterInParty(save, needHealthy)
-    local game = Game
+    local game = liveGame()
     local active = getActiveFollowerMon(game, needHealthy)
     if active then return active end
     -- fallback: first healthy in party
@@ -480,7 +538,7 @@ return function(mod)
   local wrappedResolveImage
   wrappedResolveImage = function(self, ...)
     if self and self.def and self.def.id == SPRITE_ID then
-      local activeMon = getActiveFollowerMon(Game, false)
+      local activeMon = getActiveFollowerMon(liveGame(), false)
       if activeMon then
         return getFollowerImage(activeMon.species)
       end
@@ -493,7 +551,7 @@ return function(mod)
   local wrappedSpriteDraw
   wrappedSpriteDraw = function(self, px, py, camX, camY, facing, walkPhase, stepFlip)
     if self and self.def and self.def.id == SPRITE_ID then
-      local activeMon = getActiveFollowerMon(Game, false)
+      local activeMon = getActiveFollowerMon(liveGame(), false)
       if not activeMon then return end
       local followerImg = getFollowerImage(activeMon.species)
 
@@ -629,7 +687,7 @@ return function(mod)
     local mon = getActiveFollowerMon(game, true)
     if mon then configureSpriteDef(game, mon) end
     local result = originalOnMapEntered and originalOnMapEntered(game, ow, opts)
-    if ow and ow.entities and not shouldSpawn(game, ow) then
+    if ow and not shouldSpawn(game, ow) then
       purgeFollowerEntities(ow)
     else
       syncLiveFollowerDef(game, ow)
@@ -638,10 +696,6 @@ return function(mod)
   end
 
   local function wrappedUpdate(game, ow, ...)
-    if ow and not shouldSpawn(game, ow) then
-      purgeFollowerEntities(ow)
-      return
-    end
     local mon = getActiveFollowerMon(game, true)
     if mon then configureSpriteDef(game, mon) end
     local result = originalUpdate and originalUpdate(game, ow, ...)
@@ -652,8 +706,8 @@ return function(mod)
   -- Talk wrapper for Red/Blue (and fallback for Yellow if needed)
   local function wrappedTalk(a, b, c, d)
     -- Normalise arguments
-    local game = type(a) == "table" and a.save and a or Game
-    local ow = type(b) == "table" and b.entities and b or game.overworld
+    local game = type(a) == "table" and a.save and a or liveGame()
+    local ow = type(b) == "table" and b.entities and b or worldFor(game)
     local done = type(c) == "function" and c or d
 
     local npc = PikachuFollower.current(ow)
@@ -666,7 +720,7 @@ return function(mod)
     end
 
     -- For Yellow's Pikachu, keep vanilla behaviour
-    if version == "yellow" and mon.species == "PIKACHU" and originalTalk then
+    if isYellow and mon.species == "PIKACHU" and originalTalk then
       return originalTalk(a, b, c, d)
     end
 
@@ -697,10 +751,23 @@ return function(mod)
     game.stack:push(TextBox.new(game, text, done))
   end
 
+  -- Gen 1 dispatches its stock follower before OverworldController.talkTo.
+  -- Gold resolves every facing NPC through the adapter's talkTo seam instead,
+  -- so bridge that seam to the same follower dialogue.
+  local originalWorldTalkTo = OverworldController.talkTo
+  local wrappedWorldTalkTo = function(ow, npc, ...)
+    if npc and npc.pikachuFollower then
+      wrappedTalk(liveGame(), ow, npc)
+      return true
+    end
+    return originalWorldTalkTo(ow, npc, ...)
+  end
+
   -- Apply wrappers
   if originalOnMapEntered then PikachuFollower.onMapEntered = wrappedOnMapEntered end
   if originalUpdate then PikachuFollower.update = wrappedUpdate end
   if originalTalk then PikachuFollower.talk = wrappedTalk end
+  OverworldController.talkTo = wrappedWorldTalkTo
 
   -- ----------------------------------------------------------------------
   -- 10. PartyMenu enhancements (true‑color and sync)
@@ -727,7 +794,7 @@ return function(mod)
     local result = origPartyMenuUpdate and origPartyMenuUpdate(self, dt)
     pcall(function()
       local game = self.game
-      local ow = game and game.overworld
+      local ow = worldFor(game)
       if not game or not ow then return end
       local follower = PikachuFollower.current(ow)
       if not follower then return end
@@ -760,7 +827,7 @@ return function(mod)
     game.save.followerPartyIndex = slot
     game.save.followerSpecies = mon.species
 
-    syncLiveFollowerDef(game, game.overworld)
+    syncLiveFollowerDef(game, worldFor(game))
 
     if not quiet then
       pcall(Sound.play, game.data, "Swap")
@@ -811,10 +878,7 @@ return function(mod)
   -- ----------------------------------------------------------------------
   -- 12. Yellow‑specific story overrides (optional)
   -- ----------------------------------------------------------------------
-  local yellowBattleState
-  local originalNewWild
-  local wrappedNewWild
-  if version == "yellow" then
+  if isYellow then
     mod.content.strings:override("PIKACHU", "CHARMANDER")
     mod.content.text:override("_OaksLabPikachuDislikesPokeballsText1", "OAK: What?")
     mod.content.text:override("_OaksLabPikachuDislikesPokeballsText2",
@@ -822,14 +886,14 @@ return function(mod)
     mod.content.text:override("_OaksLabOak1YouShouldTalkToIt",
       "OAK: Look at it!\nCHARMANDER seems to\nlike you!")
 
-    -- Patch the wild encounter in Oak's lab to give Charmander instead of Pikachu
-    yellowBattleState = require("src.battle.BattleState")
-    originalNewWild = yellowBattleState.newWild
-    wrappedNewWild = function(game, species, level, ...)
-      if species == "PIKACHU" and level == 5 then species = "CHARMANDER" end
-      return originalNewWild(game, species, level, ...)
-    end
-    yellowBattleState.newWild = wrappedNewWild
+    -- The encounter hook has the same contract on both generations.
+    mod.hooks:wrap("encounter.species", function(next, encounter, ctx)
+      local rolled = next(encounter, ctx)
+      if rolled and rolled.species == "PIKACHU" and rolled.level == 5 then
+        rolled.species = "CHARMANDER"
+      end
+      return rolled
+    end)
   end
 
   -- ----------------------------------------------------------------------
@@ -843,6 +907,8 @@ return function(mod)
     wrapperUpdate = wrappedUpdate,
     wrapperOnMapEntered = wrappedOnMapEntered,
     wrapperTalk = wrappedTalk,
+    originalWorldTalkTo = originalWorldTalkTo,
+    wrapperWorldTalkTo = wrappedWorldTalkTo,
     wrapperStarterInParty = wrappedStarterInParty,
     originalShouldSpawn = vanillaShouldSpawn,
     originalOnMapEnteredShouldSpawn = vanillaOnMapEnteredShouldSpawn,
@@ -850,17 +916,19 @@ return function(mod)
     wrapperSpriteDraw = wrappedSpriteDraw,
     wrapperPartyMenuDraw = wrappedPartyMenuDraw,
     wrapperPartyMenuUpdate = wrappedPartyMenuUpdate,
-    wrapperNewWild = wrappedNewWild,
+    usedShouldSpawnSetter = usedShouldSpawnSetter,
   }
 
   state.restore = function()
     -- Restore the second closure first. If update and onMapEntered share the
     -- same shouldSpawn upvalue, restoring update last still leaves the shared
     -- cell at the true vanilla function.
-    if originalOnMapEntered and vanillaOnMapEnteredShouldSpawn then
+    if usedShouldSpawnSetter and vanillaShouldSpawn then
+      PikachuFollower.setShouldSpawn(vanillaShouldSpawn)
+    elseif originalOnMapEntered and vanillaOnMapEnteredShouldSpawn then
       replaceUpvalue(originalOnMapEntered, "shouldSpawn", vanillaOnMapEnteredShouldSpawn)
     end
-    if originalUpdate and vanillaShouldSpawn then
+    if not usedShouldSpawnSetter and originalUpdate and vanillaShouldSpawn then
       replaceUpvalue(originalUpdate, "shouldSpawn", vanillaShouldSpawn)
     end
     if PikachuFollower.update == wrappedUpdate then
@@ -874,6 +942,9 @@ return function(mod)
     end
     if PikachuFollower.starterInParty == wrappedStarterInParty then
       PikachuFollower.starterInParty = originalStarterInParty
+    end
+    if OverworldController.talkTo == wrappedWorldTalkTo then
+      OverworldController.talkTo = originalWorldTalkTo
     end
     -- Only remove wrappers that are still the outermost function. Mods loaded
     -- after PokePC may legitimately wrap these methods and must not be erased.
@@ -889,15 +960,11 @@ return function(mod)
     if PartyMenu.update == wrappedPartyMenuUpdate and origPartyMenuUpdate then
       PartyMenu.update = origPartyMenuUpdate
     end
-    if yellowBattleState and yellowBattleState.newWild == wrappedNewWild
-       and originalNewWild then
-      yellowBattleState.newWild = originalNewWild
-    end
-    if rawget(PikachuFollower, STATE_KEY) == state then
-      rawset(PikachuFollower, STATE_KEY, nil)
+    if PikachuFollower.__pokepcFollowersUniversal == state then
+      PikachuFollower.__pokepcFollowersUniversal = nil
     end
   end
-  rawset(PikachuFollower, STATE_KEY, state)
+  PikachuFollower.__pokepcFollowersUniversal = state
 
   -- Install immediately for hot reloads, then retry after every enabled mod
   -- has published its exports during a normal startup.
@@ -910,9 +977,10 @@ return function(mod)
       if key ~= "pokedex_follower_sizes" and key ~= "follower_size_percent" then
         return
       end
-      local mon = getActiveFollowerMon(Game, false)
-      if mon then configureSpriteDef(Game, mon) end
-      pcall(syncLiveFollowerDef, Game, Game and Game.overworld)
+      local game = liveGame()
+      local mon = getActiveFollowerMon(game, false)
+      if mon then configureSpriteDef(game, mon) end
+      pcall(syncLiveFollowerDef, game, worldFor(game))
       installFollowerVoxelSizeHook()
     end)
   end

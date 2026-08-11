@@ -1,6 +1,6 @@
 # PokéPC Followers Mod — Gen 1 + Gen 2
 
-An all-species overworld follower mod for **Pokémon Red, Blue, and Yellow (Gen1Recomp)**. Every Generation I Pokémon is supported out of the box, and all Generation II Pokémon are supported when a compatible species expansion such as **Crystal 251** is enabled.
+An all-species overworld follower mod for **Pokémon Red, Blue, Yellow, and Gold (Gen1Recomp)**. Every Generation I Pokémon is supported out of the box; Gold supplies all 251 species natively, while Gen 1 can add Johto species through a compatible expansion such as **Crystal 251**.
 
 ---
 
@@ -39,7 +39,9 @@ An all-species overworld follower mod for **Pokémon Red, Blue, and Yellow (Gen1
    ```
 2. Launch `gen1recomp` — the mod will load automatically!
 
-To use Pokémon `#152`–`#251`, install and import **Crystal 251**, then enable both mods. PokéPC Followers remains fully usable by itself for the original 151 species.
+On Red, Blue, or Yellow, install and import **Crystal 251** to use Pokémon `#152`–`#251`. On Gold, all 251 species work directly from the game's own Pokédex data.
+
+The manifest targets both `gen1` and `gen2`; no second Gold-specific copy of the mod is needed.
 
 ### Follower size options
 
@@ -70,7 +72,7 @@ by Dramatic Shape, Dramaless Shape and Battle Art Voxel Fork.
 
 ## Inter-mod compatibility
 
-Version 0.7.0 keeps its renderer, party-menu, follower and Yellow encounter
+Version 0.8.0 keeps its renderer, party-menu, follower and Yellow encounter
 wrappers chain-safe. During a hot reload it restores a function only when its
 own wrapper is still the active outermost function, so wrappers installed by
 later-loading mods are not overwritten. This is intended for stacks containing
@@ -88,9 +90,16 @@ resolves the active follower's `follower_<species>.png` instead of the
 registered Charmander fallback.
 
 Yellow-only Oak story/encounter overrides remain restricted to Yellow and
-are not applied to Red or Blue.
+are not applied to Red, Blue, or Gold.
+
+## Gold support
+
+Version 0.8.0 targets the Gen 2 engine directly. It uses Gold's follower spawn
+seam, native 251-species Pokédex, Gen 2 sprite registry, and split icon
+sheet/species registry. Followers are hidden correctly while biking or surfing,
+and the Party Menu `FOLLOWER` action uses the same shared hook as Gen 1.
 
 
 ## Animation fix
 
-Version 1.1.1 explicitly marks the follower sprite definition as a walking sprite (`walker=true`). Gen1Recomp uses this flag to provide the `walkPhase` state used by the 6-frame overworld sheets, so the follower now switches between standing and walking frames correctly.
+The follower sprite definition is explicitly marked as a walking sprite (`walker=true`). Gen1Recomp uses this flag to provide the `walkPhase` state used by the 6-frame overworld sheets, so the follower switches between standing and walking frames correctly.
