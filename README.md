@@ -72,12 +72,19 @@ by Dramatic Shape, Dramaless Shape and Battle Art Voxel Fork.
 
 ## Inter-mod compatibility
 
-Version 0.8.0 keeps its renderer, party-menu, follower and Yellow encounter
+Version 0.8.1 keeps its renderer, party-menu, follower and Yellow encounter
 wrappers chain-safe. During a hot reload it restores a function only when its
 own wrapper is still the active outermost function, so wrappers installed by
 later-loading mods are not overwritten. This is intended for stacks containing
 Dramatic Sky Ride, Kanto Dive or the standalone Dramatic Deep Dive; those mods
 remain responsible for their own mount and underwater movement rules.
+
+When [Unique Menu Icons](https://github.com/menyas/unique-menu-icons) is also
+enabled, it owns the party-menu icon column and its color mode. PokePC keeps
+providing the overworld follower and the `FOLLOWER` action, but stops marking
+the party rows as true color. Without Unique Menu Icons, PokePC's own party
+icons remain the fallback. Use Unique Menu Icons 1.5.0 or newer; version 1.4.0
+declares PokePC incompatible in its manifest.
 
 ## Experimental Red/Blue + Voxel Fix
 

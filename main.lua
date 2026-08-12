@@ -43,6 +43,20 @@ return function(mod)
     return data and (data.sprites or data.gen2Sprites) or nil
   end
 
+  -- Unique Menu Icons deliberately owns the party icon column when both mods
+  -- are active.  Prefer its explicit capability export, while treating the
+  -- released mod id as an ownership signal for older compatible builds.
+  local function externalPartyIconOwner()
+    if type(mod.find) ~= "function" then return false end
+    local ok, handle = pcall(mod.find, mod, "unique_menu_icons")
+    if not (ok and handle) then return false end
+    local exports = handle.exports
+    if type(exports) == "table" and exports.ownsPartyIcons ~= nil then
+      return exports.ownsPartyIcons == true
+    end
+    return true
+  end
+
   -- Constants
   local FALLBACK_SPECIES = "CHARMANDER"
   local SPRITE_ID = "SPRITE_PIKACHU"
@@ -772,41 +786,54 @@ return function(mod)
   -- ----------------------------------------------------------------------
   -- 10. PartyMenu enhancements (true‑color and sync)
   -- ----------------------------------------------------------------------
-  local origPartyMenuDraw = PartyMenu.draw
-  local wrappedPartyMenuDraw
-  wrappedPartyMenuDraw = function(self, ...)
-    local result = origPartyMenuDraw and origPartyMenuDraw(self, ...)
-    if colorMode() then
+  -- Keep one stable wrapper for the lifetime of the process.  Its callbacks
+  -- are refreshed on every mod reload, so a later wrapper (for example Unique
+  -- Menu Icons) can remain outside it without causing PokePC to stack another
+  -- copy underneath on the next reload.
+  local partyMenuState = PartyMenu.__pokepcFollowersPartyMenu
+  if not partyMenuState then
+    partyMenuState = {
+      originalDraw = PartyMenu.draw,
+      originalUpdate = PartyMenu.update,
+    }
+
+    partyMenuState.wrapperDraw = function(self, ...)
+      local result = partyMenuState.originalDraw and partyMenuState.originalDraw(self, ...)
+      if partyMenuState.afterDraw then pcall(partyMenuState.afterDraw, self) end
+      return result
+    end
+    partyMenuState.wrapperUpdate = function(self, dt)
+      local result = partyMenuState.originalUpdate and partyMenuState.originalUpdate(self, dt)
+      if partyMenuState.afterUpdate then pcall(partyMenuState.afterUpdate, self) end
+      return result
+    end
+
+    PartyMenu.draw = partyMenuState.wrapperDraw
+    PartyMenu.update = partyMenuState.wrapperUpdate
+    PartyMenu.__pokepcFollowersPartyMenu = partyMenuState
+  end
+
+  partyMenuState.afterDraw = function(self)
+    if colorMode() and not externalPartyIconOwner() then
       local party = (self.game and self.game.save and self.game.save.party) or {}
       for i = 1, #party do
-        pcall(function()
-          PaletteFX.markTrueColor(0, (i - 1) * 16, 32, 16)
-        end)
+        PaletteFX.markTrueColor(0, (i - 1) * 16, 32, 16)
       end
     end
-    return result
   end
-  PartyMenu.draw = wrappedPartyMenuDraw
 
-  local origPartyMenuUpdate = PartyMenu.update
-  local wrappedPartyMenuUpdate
-  wrappedPartyMenuUpdate = function(self, dt)
-    local result = origPartyMenuUpdate and origPartyMenuUpdate(self, dt)
-    pcall(function()
-      local game = self.game
-      local ow = worldFor(game)
-      if not game or not ow then return end
-      local follower = PikachuFollower.current(ow)
-      if not follower then return end
-      local active = getActiveFollowerMon(game, false)
-      if not active then return end
-      if follower._pokepcFollowerSpecies ~= active.species then
-        syncLiveFollowerDef(game, ow)
-      end
-    end)
-    return result
+  partyMenuState.afterUpdate = function(self)
+    local game = self.game
+    local ow = worldFor(game)
+    if not game or not ow then return end
+    local follower = PikachuFollower.current(ow)
+    if not follower then return end
+    local active = getActiveFollowerMon(game, false)
+    if not active then return end
+    if follower._pokepcFollowerSpecies ~= active.species then
+      syncLiveFollowerDef(game, ow)
+    end
   end
-  PartyMenu.update = wrappedPartyMenuUpdate
 
   -- ----------------------------------------------------------------------
   -- 11. Party submenu hook (FOLLOWER / FOLLOWING)
@@ -914,8 +941,6 @@ return function(mod)
     originalOnMapEnteredShouldSpawn = vanillaOnMapEnteredShouldSpawn,
     wrapperResolveImage = wrappedResolveImage,
     wrapperSpriteDraw = wrappedSpriteDraw,
-    wrapperPartyMenuDraw = wrappedPartyMenuDraw,
-    wrapperPartyMenuUpdate = wrappedPartyMenuUpdate,
     usedShouldSpawnSetter = usedShouldSpawnSetter,
   }
 
@@ -953,12 +978,6 @@ return function(mod)
     end
     if SpriteRenderer.draw == wrappedSpriteDraw and origSpriteDraw then
       SpriteRenderer.draw = origSpriteDraw
-    end
-    if PartyMenu.draw == wrappedPartyMenuDraw and origPartyMenuDraw then
-      PartyMenu.draw = origPartyMenuDraw
-    end
-    if PartyMenu.update == wrappedPartyMenuUpdate and origPartyMenuUpdate then
-      PartyMenu.update = origPartyMenuUpdate
     end
     if PikachuFollower.__pokepcFollowersUniversal == state then
       PikachuFollower.__pokepcFollowersUniversal = nil

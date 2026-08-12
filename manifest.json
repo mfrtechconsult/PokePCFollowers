@@ -1,7 +1,7 @@
 {
   "id": "PokePCFollowers_VoxelMerge",
   "name": "PokéPC Followers (Voxel Merge)",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "entry": "main.lua",
   "api": 2,
   "games": [
