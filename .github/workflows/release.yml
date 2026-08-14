@@ -1,0 +1,157 @@
+name: Publish release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - manifest.json
+      - main.lua
+      - main_sandbox.lua
+      - assets/**
+      - overrides/**
+      - mod.card
+      - CHANGELOG.md
+      - RELEASE_NOTES_*.md
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pokepc-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Read and validate manifest
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool manifest.json >/dev/null
+          VERSION=$(python3 -c 'import json; print(json.load(open("manifest.json", encoding="utf-8"))["version"])')
+          ENTRY=$(python3 -c 'import json; print(json.load(open("manifest.json", encoding="utf-8"))["entry"])')
+          python3 - <<'PY'
+          import json
+          m = json.load(open('manifest.json', encoding='utf-8'))
+          assert m['version'] == '0.8.2', m['version']
+          assert m['entry'] == 'main_sandbox.lua', m['entry']
+          assert m.get('game_version') == '0.0.0-dev || >=0.1.86 <2.0.0'
+          permissions = set(m.get('permissions') or [])
+          assert 'filesystem' not in permissions
+          assert permissions <= {'engine_internals'}
+          assert set(m.get('games') or []) == {'gen1', 'gen2'}
+          PY
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "archive=PokePCFollowers-$VERSION.zip" >> "$GITHUB_OUTPUT"
+          echo "entry=$ENTRY" >> "$GITHUB_OUTPUT"
+
+      - name: Install LuaJIT
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y luajit
+
+      - name: Validate sandbox source
+        shell: bash
+        run: |
+          set -euo pipefail
+          luajit -b main_sandbox.lua /tmp/pokepc-sandbox.ljbc
+          luajit -b main.lua /tmp/pokepc-legacy.ljbc
+
+          if grep -R -n -E 'love\.filesystem|require\(["'"'](io|debug|package|ffi)["'"']\)' \
+              main_sandbox.lua main.lua; then
+            echo "Raw sandbox-bypassing API detected" >&2
+            exit 1
+          fi
+
+          grep -q 'mod:read("main.lua")' main_sandbox.lua
+          grep -q 'mod.assets:path("assets/sprites/follower_004.png")' main_sandbox.lua
+          grep -q 'PikachuFollower.setShouldSpawn' main_sandbox.lua
+
+      - name: Build launcher archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="${{ steps.version.outputs.archive }}"
+          STAGING="$RUNNER_TEMP/pokepc-release"
+          rm -rf "$STAGING" "$ARCHIVE"
+          mkdir -p "$STAGING"
+          git archive HEAD | tar -x -C "$STAGING"
+
+          rm -rf "$STAGING/.github"
+          rm -f "$STAGING/.gitignore" "$STAGING/.luarc.json" \
+                "$STAGING/.modkitignore" "$STAGING/mod.zip"
+          find "$STAGING" -type f -name '*Zone.Identifier' -delete
+
+          (cd "$STAGING" && zip -qr "$GITHUB_WORKSPACE/$ARCHIVE" .)
+          unzip -Z1 "$ARCHIVE" | grep -qx 'manifest.json'
+          unzip -Z1 "$ARCHIVE" | grep -qx 'main_sandbox.lua'
+          unzip -Z1 "$ARCHIVE" | grep -qx 'main.lua'
+          if unzip -Z1 "$ARCHIVE" | grep -q 'Zone.Identifier'; then
+            echo "Zone.Identifier metadata leaked into release" >&2
+            exit 1
+          fi
+          if unzip -Z1 "$ARCHIVE" | grep -qx 'mod.zip'; then
+            echo "stale tracked mod.zip leaked into release" >&2
+            exit 1
+          fi
+          unzip -t "$ARCHIVE"
+
+      - name: Validate exact release ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE="${{ steps.version.outputs.archive }}"
+          CHECK="$RUNNER_TEMP/pokepc-release-check"
+          rm -rf "$CHECK"
+          mkdir -p "$CHECK"
+          unzip -q "$ARCHIVE" -d "$CHECK"
+          python3 -m json.tool "$CHECK/manifest.json" >/dev/null
+          luajit -b "$CHECK/main_sandbox.lua" /tmp/pokepc-release-sandbox.ljbc
+          luajit -b "$CHECK/main.lua" /tmp/pokepc-release-legacy.ljbc
+          sha256sum "$ARCHIVE"
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.version.outputs.version }}"
+          NOTES="RELEASE_NOTES_v$VERSION.md"
+          if [ -f "$NOTES" ]; then
+            cp "$NOTES" /tmp/release-notes.md
+          else
+            printf '# PokePCFollowers %s\n\nSandbox-compatible release.\n' "$VERSION" > /tmp/release-notes.md
+          fi
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+          ARCHIVE: ${{ steps.version.outputs.archive }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ARCHIVE" --clobber
+            gh release edit "$TAG" \
+              --title "PokePCFollowers $VERSION" \
+              --notes-file /tmp/release-notes.md \
+              --latest
+          else
+            gh release create "$TAG" "$ARCHIVE" \
+              --target "$GITHUB_SHA" \
+              --title "PokePCFollowers $VERSION" \
+              --notes-file /tmp/release-notes.md \
+              --latest
+          fi
