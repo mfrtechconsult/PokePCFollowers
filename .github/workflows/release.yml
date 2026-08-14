@@ -42,7 +42,7 @@ jobs:
           python3 - <<'PY'
           import json
           m = json.load(open('manifest.json', encoding='utf-8'))
-          assert m['version'] == '0.8.2', m['version']
+          assert m['version'] == '0.8.3', m['version']
           assert m['entry'] == 'main_sandbox.lua', m['entry']
           assert m.get('game_version') == '0.0.0-dev || >=0.1.86 <2.0.0'
           permissions = set(m.get('permissions') or [])
@@ -78,6 +78,8 @@ jobs:
           grep -q -F 'mod:read("main.lua")' main_sandbox.lua
           grep -q -F 'mod.assets:path("assets/sprites/follower_004.png")' main_sandbox.lua
           grep -q -F 'PikachuFollower.setShouldSpawn' main_sandbox.lua
+          grep -q -F 'resolveFollowerSprite' main_sandbox.lua
+          grep -q -F 'providerRepository' main_sandbox.lua
 
       - name: Build launcher archive
         shell: bash
