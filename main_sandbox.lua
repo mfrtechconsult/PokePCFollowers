@@ -163,6 +163,30 @@ return function(mod)
 
   local result = legacy(mod)
 
+  -- Canonical sandbox-safe sprite provider contract for 0.1.86+ consumers.
+  -- assetPath remains exported by the legacy core as a compatibility seam for
+  -- older integrations; resolveFollowerSprite is the preferred definition API.
+  if mod.exports then
+    mod.exports.providerRepository = "mfrtechconsult/PokePCFollowers"
+    mod.exports.resolveFollowerSprite = function(opts)
+      local species = type(opts) == "table" and opts.species or opts
+      if type(species) ~= "string" or species == "" then return nil end
+
+      local resolver = mod.exports.assetPath
+      if type(resolver) ~= "function" then return nil end
+      local okPath, path = pcall(resolver, species)
+      if not okPath or type(path) ~= "string" or path == "" then return nil end
+
+      return {
+        image = path,
+        frames = 6,
+        walker = true,
+        trueColor = true,
+        providerId = mod.id,
+      }
+    end
+  end
+
   -- Make hot-unload/reload neutral: legacy restore removes its own wrappers;
   -- this extra tail clears the sandbox predicate so the remaining shim behaves
   -- exactly like vanilla until PokePC is initialized again.
