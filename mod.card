@@ -2,7 +2,7 @@
   "title": "PokéPC Followers Mod",
   "summary": "All 251 Gen 1 and Gen 2 overworld followers with Gold, Crystal 251 and voxel/tilt compatibility.",
   "author": "Antigravity & gamecorner33",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "tags": [
     "graphics",
     "followers",
@@ -17,7 +17,8 @@
     "Party Menu 'FOLLOWER' UI option for explicit follower selection",
     "Full-color GBA overworld graphics over colorized terrain",
     "Red, Blue and Gold follower spawning without Yellow-only story flags",
-    "Animated overworld walking frames enabled for all follower sprites"
+    "Animated overworld walking frames enabled for all follower sprites",
+    "Gen1Recomp 0.1.86+ sandbox-compatible bootstrap and scoped asset paths"
   ],
-  "description": "All 251 Gen 1 and Gen 2 overworld followers with Crystal 251 and Dramatic Shape voxel/tilt compatibility for Red, Blue, Yellow, and Gold."
+  "description": "All 251 Gen 1 and Gen 2 overworld followers with Crystal 251 and Dramatic Shape voxel/tilt compatibility for Red, Blue, Yellow, and Gold. Version 0.8.2 is compatible with the Gen1Recomp 0.1.86+ mod sandbox."
 }
