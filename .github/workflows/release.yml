@@ -68,15 +68,16 @@ jobs:
           luajit -b main_sandbox.lua /tmp/pokepc-sandbox.ljbc
           luajit -b main.lua /tmp/pokepc-legacy.ljbc
 
-          if grep -R -n -E 'love\.filesystem|require\(["'"'](io|debug|package|ffi)["'"']\)' \
-              main_sandbox.lua main.lua; then
-            echo "Raw sandbox-bypassing API detected" >&2
-            exit 1
-          fi
+          for pattern in 'love.filesystem' 'require("io")' 'require("debug")' 'require("package")' 'require("ffi")'; do
+            if grep -R -n -F "$pattern" main_sandbox.lua main.lua; then
+              echo "Raw sandbox-bypassing API detected: $pattern" >&2
+              exit 1
+            fi
+          done
 
-          grep -q 'mod:read("main.lua")' main_sandbox.lua
-          grep -q 'mod.assets:path("assets/sprites/follower_004.png")' main_sandbox.lua
-          grep -q 'PikachuFollower.setShouldSpawn' main_sandbox.lua
+          grep -q -F 'mod:read("main.lua")' main_sandbox.lua
+          grep -q -F 'mod.assets:path("assets/sprites/follower_004.png")' main_sandbox.lua
+          grep -q -F 'PikachuFollower.setShouldSpawn' main_sandbox.lua
 
       - name: Build launcher archive
         shell: bash
