@@ -25,19 +25,9 @@ An all-species overworld follower mod for **Pokémon Red, Blue, Yellow, and Gold
 
 ## 📋 Installation
 
-1. Place the `pokepcfollowers` folder inside your `mods/` directory:
-   ```
-   pokemon-gen1-recomp/
-   └── mods/
-       └── pokepcfollowers/
-           ├── manifest.json
-           ├── mod.card
-           ├── main.lua
-           ├── README.md
-           └── assets/
-               └── sprites/
-   ```
-2. Launch `gen1recomp` — the mod will load automatically!
+**PokePCFollowers 0.8.2 requires Gen1Recomp 0.1.86 or newer.** Install the ZIP from the GitHub release through `MODS > Import mod .zip`, or place the unpacked mod inside `mods/`.
+
+The sandbox entry point is `main_sandbox.lua`; it loads the existing follower implementation through Gen1Recomp's scoped mod APIs.
 
 On Red, Blue, or Yellow, install and import **Crystal 251** to use Pokémon `#152`–`#251`. On Gold, all 251 species work directly from the game's own Pokédex data.
 
@@ -52,6 +42,12 @@ logical map cell and retain their normal movement and interactions.
 
 ---
 
+## Gen1Recomp 0.1.86+ sandbox compatibility
+
+Version 0.8.2 is migrated to the Gen1Recomp per-mod sandbox. The mod does not request raw filesystem access. Its own asset paths are rooted through `mod.assets:path(...)`, its legacy implementation is read through `mod:read(...)`, and cross-mod integration continues through `mod.find(...).exports`.
+
+The old Gen 1 fallback that depended on `debug.getupvalue` is no longer required at runtime: the sandbox entry installs a narrow follower-spawn compatibility seam before the existing implementation loads. This keeps Red/Blue follower spawning functional even though the sandbox intentionally does not expose the Lua `debug` library.
+
 ## 👥 Credits & Acknowledgments
 
 * **Generation I + II Overworld Sprites**: Huge credit and special thanks to ShockSlayer, the makers of the legendary ROM hack **Pokémon Crystal Clear**, and the PokéPC / Followers EX lineage for the native GSC-style follower sheets. The Generation II sheets are distributed in the built-in Poke Followers pack from [Wilds of Kanto](https://github.com/YoDrehDenSwagAuf/overworld-spawn-mod). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
@@ -60,52 +56,25 @@ logical map cell and retain their normal movement and interactions.
 
 ## Voxel compatibility
 
-This build includes a compatibility fix for **Dramatic Shape Voxel Mod 1.3.0**.
-The follower sprite is now resolved dynamically through `SpriteRenderer:resolveImage()`
-as well as the normal 2D draw hook. This prevents voxel mode from sampling the
-registered Charmander fallback sheet for every follower.
+This build includes compatibility for Dramatic Shape-family voxel providers. The follower sprite is resolved dynamically through `SpriteRenderer:resolveImage()` as well as the normal 2D draw hook, preventing voxel mode from sampling the registered Charmander fallback sheet for every follower.
 
-The follower sprite is also marked `trueColor` for render-pipeline use so the
-voxel renderer does not run the fixed `SPRITE_PIKACHU` image through its palette
-bake. Pokédex-derived sizes are forwarded to the billboard and shadow meshes used
-by Dramatic Shape, Dramaless Shape and Battle Art Voxel Fork.
+The follower sprite is also marked `trueColor` for render-pipeline use so the voxel renderer does not run the fixed `SPRITE_PIKACHU` image through its palette bake. Pokédex-derived sizes are forwarded to the billboard and shadow meshes used by Dramatic Shape, Dramaless Shape and Battle Art Voxel Fork.
 
 ## Inter-mod compatibility
 
-Version 0.8.1 keeps its renderer, party-menu, follower and Yellow encounter
-wrappers chain-safe. During a hot reload it restores a function only when its
-own wrapper is still the active outermost function, so wrappers installed by
-later-loading mods are not overwritten. This is intended for stacks containing
-Dramatic Sky Ride, Kanto Dive or the standalone Dramatic Deep Dive; those mods
-remain responsible for their own mount and underwater movement rules.
+Version 0.8.2 keeps its renderer, party-menu, follower and Yellow encounter wrappers chain-safe. During a hot reload it restores a function only when its own wrapper is still the active outermost function, so wrappers installed by later-loading mods are not overwritten. This is intended for stacks containing Dramatic Sky Ride, Kanto Dive or the standalone Dramatic Deep Dive; those mods remain responsible for their own mount and underwater movement rules.
 
-When [Unique Menu Icons](https://github.com/menyas/unique-menu-icons) is also
-enabled, it owns the party-menu icon column and its color mode. PokePC keeps
-providing the overworld follower and the `FOLLOWER` action, but stops marking
-the party rows as true color. Without Unique Menu Icons, PokePC's own party
-icons remain the fallback. Use Unique Menu Icons 1.5.0 or newer; version 1.4.0
-declares PokePC incompatible in its manifest.
+When [Unique Menu Icons](https://github.com/menyas/unique-menu-icons) is also enabled, it owns the party-menu icon column and its color mode. PokePC keeps providing the overworld follower and the `FOLLOWER` action, but stops marking the party rows as true color. Without Unique Menu Icons, PokePC's own party icons remain the fallback. Use Unique Menu Icons 1.5.0 or newer; version 1.4.0 declares PokePC incompatible in its manifest.
 
-## Experimental Red/Blue + Voxel Fix
+## Red/Blue follower support
 
-This build extends the follower entity to Pokémon Red and Pokémon Blue.
-The stock `PikachuFollower` logic is Yellow-only, so the mod replaces its
-spawn condition with a version-neutral healthy-party check.
+The mod extends the follower entity to Pokémon Red and Pokémon Blue. The stock Gen 1 `PikachuFollower` spawn condition is Yellow/Pikachu-specific, so PokePC supplies a version-neutral healthy-party condition while retaining the engine's native trailing, ledge and map-transition behavior.
 
-It also keeps the Dramatic Shape compatibility fix: voxel/tilt rendering
-resolves the active follower's `follower_<species>.png` instead of the
-registered Charmander fallback.
-
-Yellow-only Oak story/encounter overrides remain restricted to Yellow and
-are not applied to Red, Blue, or Gold.
+Yellow-only Oak story/encounter overrides remain restricted to Yellow and are not applied to Red, Blue, or Gold.
 
 ## Gold support
 
-Version 0.8.0 targets the Gen 2 engine directly. It uses Gold's follower spawn
-seam, native 251-species Pokédex, Gen 2 sprite registry, and split icon
-sheet/species registry. Followers are hidden correctly while biking or surfing,
-and the Party Menu `FOLLOWER` action uses the same shared hook as Gen 1.
-
+PokePC targets the Gen 2 engine directly. It uses Gold's follower spawn seam, native 251-species Pokédex, Gen 2 sprite registry, and split icon sheet/species registry. Followers are hidden correctly while biking or surfing, and the Party Menu `FOLLOWER` action uses the same shared hook as Gen 1.
 
 ## Animation fix
 
