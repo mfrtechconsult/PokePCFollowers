@@ -1,0 +1,102 @@
+name: Gen1Recomp compatibility
+
+on:
+  pull_request:
+  push:
+    branches:
+      - agent/gen1recomp-0.2-silver
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  latest-gen1recomp:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out PokePC Followers
+        uses: actions/checkout@v4
+
+      - name: Install validation dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y luajit
+
+      - name: Check out current Gen1Recomp dev
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth=1 --branch dev https://github.com/bryanthaboi/gen1recomp.git "$RUNNER_TEMP/gen1recomp"
+          git -C "$RUNNER_TEMP/gen1recomp" rev-parse HEAD
+
+      - name: Validate manifest and Lua source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool manifest.json >/dev/null
+          luajit -b main_sandbox.lua "$RUNNER_TEMP/pokepc-sandbox.ljbc"
+          luajit -b main.lua "$RUNNER_TEMP/pokepc-legacy.ljbc"
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path('manifest.json').read_text(encoding='utf-8'))
+          assert manifest['version'] == '0.9.0-rc.1', manifest['version']
+          assert manifest['api'] == 2
+          assert set(manifest.get('games') or []) == {'gen1', 'gen2'}
+          assert manifest['github'] == 'burgerslayer7/PokePCFollowers'
+          assert manifest['game_version'] == '0.0.0-dev || >=0.2.0 <2.0.0'
+          assert 'filesystem' not in set(manifest.get('permissions') or [])
+
+          runtime = Path('main.lua').read_text(encoding='utf-8')
+          assert 'GameVersion.generation()' in runtime
+          assert 'GameVersion.isGold(' not in runtime
+
+          sandbox = Path('main_sandbox.lua').read_text(encoding='utf-8')
+          assert 'version == "silver"' in sandbox
+          assert 'generation == 2' in sandbox
+          assert 'PikachuFollower.setShouldSpawn' in sandbox
+          assert 'burgerslayer7/PokePCFollowers' in sandbox
+          PY
+
+      - name: Verify Silver and Gen2 follower facade upstream
+        shell: bash
+        env:
+          ENGINE: ${{ runner.temp }}/gen1recomp
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          root = Path(os.environ['ENGINE'])
+          gv = (root / 'src/core/GameVersion.lua').read_text(encoding='utf-8')
+          follower = (root / 'src/world/gen2/Follower.lua').read_text(encoding='utf-8')
+          compat = (root / 'src/mods/Gen2Compat.lua').read_text(encoding='utf-8')
+          contributing = (root / 'CONTRIBUTING-mods.md').read_text(encoding='utf-8')
+
+          silver = re.search(r'\bsilver\s*=\s*\{(.*?)\n\s*\},', gv, re.S)
+          assert silver, 'current Gen1Recomp dev no longer exposes a Silver target'
+          assert 'generation = 2' in silver.group(1), 'Silver is not routed as Gen2'
+          assert '"silver"' in gv and 'GameVersion.ORDER' in gv
+
+          assert 'function Follower.setShouldSpawn' in follower, \
+              'Gen2 follower runtime lost setShouldSpawn'
+          assert 'src.world.PikachuFollower' in compat, \
+              'Gen2 compatibility facade lost PikachuFollower'
+          assert 'Pokemon Gold and Silver are Gen 2' in contributing, \
+              'upstream Gen2 target contract changed'
+          PY
+
+      - name: Run current modkit checks
+        shell: bash
+        env:
+          ENGINE: ${{ runner.temp }}/gen1recomp
+        run: |
+          set -euo pipefail
+          python3 "$ENGINE/tools/modkit.py" lint "$GITHUB_WORKSPACE"
+          python3 "$ENGINE/tools/modkit.py" validate "$GITHUB_WORKSPACE"
