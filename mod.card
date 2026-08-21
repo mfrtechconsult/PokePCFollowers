@@ -1,8 +1,8 @@
 {
   "title": "PokéPC Followers Mod",
-  "summary": "All 251 Gen 1 and Gen 2 overworld followers with Gold, Crystal 251 and voxel/tilt compatibility.",
+  "summary": "All 251 Gen 1 and Gen 2 overworld followers for Red, Blue, Yellow, Gold and Silver.",
   "author": "Antigravity & gamecorner33",
-  "version": "0.8.2",
+  "version": "0.9.0-rc.1",
   "tags": [
     "graphics",
     "followers",
@@ -11,14 +11,15 @@
   "features": [
     "All 251 Gen 1 and Gen 2 Pokémon overworld sprites supported",
     "Native GSC-style Generation II follower sheets without HGSS downscaling",
+    "Shared Gold/Silver Gen 2 follower path through the official compatibility facade",
     "Automatic Crystal 251 species detection",
     "Pokédex-proportional follower sizes with safe visual limits",
     "Party Slot 1 default follower with automatic lead switching",
     "Party Menu 'FOLLOWER' UI option for explicit follower selection",
     "Full-color GBA overworld graphics over colorized terrain",
-    "Red, Blue and Gold follower spawning without Yellow-only story flags",
+    "Red, Blue, Yellow, Gold and Silver follower spawning",
     "Animated overworld walking frames enabled for all follower sprites",
-    "Gen1Recomp 0.1.86+ sandbox-compatible bootstrap and scoped asset paths"
+    "Gen1Recomp 0.2.x / mod API 2 sandbox-compatible bootstrap and scoped asset paths"
   ],
-  "description": "All 251 Gen 1 and Gen 2 overworld followers with Crystal 251 and Dramatic Shape voxel/tilt compatibility for Red, Blue, Yellow, and Gold. Version 0.8.2 is compatible with the Gen1Recomp 0.1.86+ mod sandbox."
+  "description": "All 251 Gen 1 and Gen 2 overworld followers with Crystal 251 and Dramatic Shape-family voxel compatibility for Red, Blue, Yellow, Gold, and Silver. Version 0.9.0-rc.1 targets Gen1Recomp 0.2.x and validates Silver through the same generation-2 API used by Gold."
 }
