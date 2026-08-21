@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.9.0-rc.1 - 2026-08-21
+
+### Added
+- Add Pokémon Silver to the documented and validated Gen2 target set.
+- Export the active game version/generation and the maintained repository id through the sandbox provider surface.
+- Add an explicit Gen2 follower-facade guard so Gold/Silver cannot silently load without `setShouldSpawn`.
+- Add CI against the current Gen1Recomp `dev` branch, including Silver target and Gen2 facade checks.
+
+### Changed
+- Raise the supported stable engine baseline from Gen1Recomp 0.1.86 to 0.2.0 while continuing to allow `0.0.0-dev` builds.
+- Move repository metadata from `mfrtechconsult/PokePCFollowers` to `burgerslayer7/PokePCFollowers`.
+- Treat Gold and Silver through the same `GameVersion.generation() == 2` path instead of adding edition-specific follower logic.
+
+### Validation status
+- Static sandbox/Lua validation is automated in CI.
+- Gen1Recomp `dev` is checked for the Silver launcher target and the shared Gen2 follower adapter.
+- Real in-game Silver validation is still required before promoting this RC to a stable release.
+
 ## 0.8.2 - 2026-08-14
 
 ### Changed
