@@ -1,14 +1,32 @@
--- Gen1Recomp 0.1.86+ sandbox bootstrap for PokePC Followers.
+-- Gen1Recomp 0.2.x / API 2 sandbox bootstrap for PokePC Followers.
 --
 -- The legacy implementation still contains a Gen 1 debug-upvalue fallback and
--- builds its own asset paths from mod.path. The 0.1.86 sandbox deliberately
--- removes debug and raw filesystem access. This bootstrap installs the one
+-- builds its own asset paths from mod.path. The sandbox deliberately removes
+-- debug and raw filesystem access. This bootstrap installs the one
 -- compatibility seam the legacy code needs, derives its root from the scoped
 -- mod.assets API, then loads the existing implementation through mod:read.
+--
+-- Gold and Silver share the Gen 2 mod API and follower facade. Keep all Gen 2
+-- behavior generation-driven so edition-specific data remains owned by the
+-- engine instead of being duplicated here.
 
 return function(mod)
   local GameVersion = require("src.core.GameVersion")
   local PikachuFollower = require("src.world.PikachuFollower")
+
+  local version = type(GameVersion.get) == "function" and GameVersion.get() or "red"
+  local generation = type(GameVersion.generation) == "function"
+    and GameVersion.generation() or 1
+
+  -- Silver became a first-class Gen1Recomp launcher target on the 0.2.x dev
+  -- line. Fail loudly if an engine ever exposes the edition without routing it
+  -- through the shared Gen 2 contract that PokePC relies on.
+  if version == "silver" and generation ~= 2 then
+    if mod.log and mod.log.error then
+      mod.log:error("Silver must be exposed through the Gen 2 mod API")
+    end
+    return
+  end
 
   -- Keep every legacy asset lookup rooted in this mod. mod.assets:path() is
   -- the sandbox-supported path resolver and rejects absolute/traversal paths.
@@ -22,13 +40,10 @@ return function(mod)
     end
   end
 
-  -- Gen 2 already exposes a named shouldSpawn seam through its compatibility
-  -- facade. Current Gen 1 keeps that predicate private, which older PokePC
-  -- releases reached with debug.getupvalue. debug is intentionally absent in
-  -- the 0.1.86 sandbox, so provide a narrow setter without exposing internals.
-  local generation = type(GameVersion.generation) == "function"
-    and GameVersion.generation() or 1
-
+  -- Gen 2 exposes a named shouldSpawn seam through its compatibility facade.
+  -- Current Gen 1 keeps that predicate private, which older PokePC releases
+  -- reached with debug.getupvalue. debug is intentionally absent in the
+  -- sandbox, so provide a narrow setter without exposing internals.
   local sandboxShim = nil
   if generation == 1 and type(PikachuFollower.setShouldSpawn) ~= "function" then
     local shim = PikachuFollower.__pokepcSandboxSpawnGate
@@ -131,6 +146,16 @@ return function(mod)
     PikachuFollower.update = shim.update
   end
 
+  -- Gold and Silver both require the named Gen 2 follower spawn seam. Refuse
+  -- to silently load a half-working follower if a future engine regression
+  -- drops the adapter.
+  if generation == 2 and type(PikachuFollower.setShouldSpawn) ~= "function" then
+    if mod.log and mod.log.error then
+      mod.log:error("Gen 2 follower adapter is missing setShouldSpawn for %s", tostring(version))
+    end
+    return
+  end
+
   local source, readErr = mod:read("main.lua")
   if type(source) ~= "string" then
     if mod.log and mod.log.error then
@@ -163,11 +188,21 @@ return function(mod)
 
   local result = legacy(mod)
 
-  -- Canonical sandbox-safe sprite provider contract for 0.1.86+ consumers.
+  -- Canonical sandbox-safe sprite provider contract for consumers.
   -- assetPath remains exported by the legacy core as a compatibility seam for
   -- older integrations; resolveFollowerSprite is the preferred definition API.
   if mod.exports then
-    mod.exports.providerRepository = "mfrtechconsult/PokePCFollowers"
+    mod.exports.providerRepository = "burgerslayer7/PokePCFollowers"
+    mod.exports.engineTarget = "Gen1Recomp 0.2.x / mod API 2"
+    mod.exports.gameVersion = version
+    mod.exports.generation = generation
+    mod.exports.supportedGames = {
+      red = true,
+      blue = true,
+      yellow = true,
+      gold = true,
+      silver = true,
+    }
     mod.exports.resolveFollowerSprite = function(opts)
       local species = type(opts) == "table" and opts.species or opts
       if type(species) ~= "string" or species == "" then return nil end
