@@ -1,18 +1,18 @@
 {
   "id": "PokePCFollowers_VoxelMerge",
   "name": "PokéPC Followers (Voxel Merge)",
-  "version": "0.8.3",
+  "version": "0.9.0-rc.1",
   "entry": "main_sandbox.lua",
   "api": 2,
   "games": [
     "gen1",
     "gen2"
   ],
-  "github": "mfrtechconsult/PokePCFollowers",
+  "github": "burgerslayer7/PokePCFollowers",
   "author": "Antigravity & gamecorner33",
-  "description": "All 251 Gen 1 and Gen 2 overworld followers with Pokédex-proportional sizing and full 3D Voxel compatibility for Red, Blue, Yellow, and Gold.",
+  "description": "All 251 Gen 1 and Gen 2 overworld followers with Pokédex-proportional sizing and full 3D Voxel compatibility for Red, Blue, Yellow, Gold, and Silver.",
   "category": "GRAPHICS",
-  "game_version": "0.0.0-dev || >=0.1.86 <2.0.0",
+  "game_version": "0.0.0-dev || >=0.2.0 <2.0.0",
   "optional_dependencies": [
     "CRYSTAL_251"
   ],
