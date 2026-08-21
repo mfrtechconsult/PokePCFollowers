@@ -100,3 +100,4 @@ jobs:
           set -euo pipefail
           python3 "$ENGINE/tools/modkit.py" lint "$GITHUB_WORKSPACE"
           python3 "$ENGINE/tools/modkit.py" validate "$GITHUB_WORKSPACE"
+          python3 "$ENGINE/tools/modkit.py" gen2check "$GITHUB_WORKSPACE" --strict --notes
