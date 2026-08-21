@@ -41,10 +41,14 @@ jobs:
           ENTRY=$(python3 -c 'import json; print(json.load(open("manifest.json", encoding="utf-8"))["entry"])')
           python3 - <<'PY'
           import json
+          import re
+
           m = json.load(open('manifest.json', encoding='utf-8'))
-          assert m['version'] == '0.8.3', m['version']
+          assert re.fullmatch(r'\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?', m['version']), m['version']
           assert m['entry'] == 'main_sandbox.lua', m['entry']
-          assert m.get('game_version') == '0.0.0-dev || >=0.1.86 <2.0.0'
+          assert m.get('api') == 2, m.get('api')
+          assert m.get('game_version') == '0.0.0-dev || >=0.2.0 <2.0.0', m.get('game_version')
+          assert m.get('github') == 'burgerslayer7/PokePCFollowers', m.get('github')
           permissions = set(m.get('permissions') or [])
           assert 'filesystem' not in permissions
           assert permissions <= {'engine_internals'}
@@ -80,6 +84,7 @@ jobs:
           grep -q -F 'PikachuFollower.setShouldSpawn' main_sandbox.lua
           grep -q -F 'resolveFollowerSprite' main_sandbox.lua
           grep -q -F 'providerRepository' main_sandbox.lua
+          grep -q -F 'burgerslayer7/PokePCFollowers' main_sandbox.lua
 
       - name: Build launcher archive
         shell: bash
@@ -133,7 +138,7 @@ jobs:
           if [ -f "$NOTES" ]; then
             cp "$NOTES" /tmp/release-notes.md
           else
-            printf '# PokePCFollowers %s\n\nSandbox-compatible release.\n' "$VERSION" > /tmp/release-notes.md
+            printf '# PokePCFollowers %s\n\nGen1Recomp 0.2.x compatible release.\n' "$VERSION" > /tmp/release-notes.md
           fi
 
       - name: Create or update GitHub release
